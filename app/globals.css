@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Hull — the instrument bezel, and the night helm. */
+  --color-hull-950: #06131f;
+  --color-hull-900: #0b2033;
+  --color-hull-800: #123048;
+  --color-hull-700: #1b4666;
+  --color-hull-600: #275f86;
+
+  /* Chart — NOAA chart paper: buff, not white, not warm-cream. */
+  --color-chart-50: #faf7ef;
+  --color-chart-100: #f2ecdd;
+  --color-chart-200: #e3d8bf;
+  --color-chart-300: #cdbe9c;
+
+  /* Shoal — the pale cyan a chart uses for shallow water. */
+  --color-shoal-100: #d6ecf0;
+  --color-shoal-300: #8fc9d6;
+  --color-shoal-500: #3d8ea3;
+  --color-shoal-700: #1f5f72;
+
+  /* Chart magenta — on a real chart this ink means "navigational
+     significance": buoys, compass roses, cautionary notes. Here it means
+     the same thing: act on this. */
+  --color-magenta-400: #d9578f;
+  --color-magenta-500: #c22e6f;
+  --color-magenta-600: #9e1f57;
+
+  --color-alarm-500: #c2452d;
+  --color-alarm-600: #9c3422;
+  --color-ok-500: #2f7d54;
+  --color-ok-600: #24603f;
+
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-chart-50 text-hull-950 antialiased;
+  font-family: var(--font-sans);
+}
+
+.dark body {
+  @apply bg-hull-950 text-chart-100;
+}
+
+/*
+ * Every measured value — engine hours, fuel, tide height, wind speed — is set
+ * in tabular mono so columns of numbers line up and a changing readout does
+ * not jitter.
+ */
+.readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/*
+ * Chart annotation: how a nautical chart labels a feature. Used for field
+ * labels and section eyebrows.
+ */
+.annotation {
+  @apply text-[0.6875rem] font-semibold uppercase tracking-[0.14em];
+}
+
+/* Keyboard focus stays visible everywhere — gloves and sun are hard enough. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  @apply outline-2 outline-offset-2 outline-magenta-500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
