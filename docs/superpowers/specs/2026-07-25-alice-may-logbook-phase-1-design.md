@@ -155,35 +155,59 @@ create index on public.boat_members (user_id);
 
 RLS is enabled on all six tables. There is no permissive fallback policy anywhere.
 
+The two helpers live in a **private, unexposed schema**. Postgres grants `EXECUTE` to `PUBLIC` on every new function, so a `SECURITY DEFINER` function sitting in `public` is a callable API endpoint for `anon` and `authenticated`. Putting them in `private` and revoking `EXECUTE` closes that.
+
 ```sql
-create function public.is_boat_member(b uuid) returns boolean
+create schema if not exists private;
+revoke all on schema private from anon, authenticated;
+
+create function private.is_boat_member(b uuid) returns boolean
   language sql security definer stable set search_path = ''
 as $$ select exists (
   select 1 from public.boat_members m
   where m.boat_id = b and m.user_id = (select auth.uid())
 ) $$;
 
-create function public.can_edit_boat(b uuid) returns boolean
+create function private.can_edit_boat(b uuid) returns boolean
   language sql security definer stable set search_path = ''
 as $$ select exists (
   select 1 from public.boat_members m
   where m.boat_id = b and m.user_id = (select auth.uid())
     and m.role in ('owner','crew')
 ) $$;
+
+revoke all on function private.is_boat_member(uuid) from public, anon, authenticated;
+revoke all on function private.can_edit_boat(uuid)  from public, anon, authenticated;
 ```
 
-`security definer` is load-bearing — without it, a policy on `boat_members` that queries `boat_members` recurses. `(select auth.uid())` rather than bare `auth.uid()` is evaluated once per query instead of once per row.
+`security definer` is load-bearing — without it, a policy on `boat_members` that queries `boat_members` recurses. Both functions key off `(select auth.uid())` internally and return only a boolean about the caller, so they leak nothing even if reached. `(select auth.uid())` rather than bare `auth.uid()` is evaluated once per query instead of once per row.
+
+Every policy is written `to authenticated` with an ownership predicate — never `to authenticated` alone, and never `auth.role() = 'authenticated'`, which is deprecated and passes for anonymous sign-ins. Update policies carry **both** `using` and `with check`, otherwise a member could reassign a trip's `boat_id` to a boat they don't belong to.
 
 | Table | SELECT | INSERT / UPDATE / DELETE |
 |---|---|---|
-| `boats` | `is_boat_member(id)` | none (managed by migration / service role) |
-| `crew` | `is_boat_member(boat_id)` | `can_edit_boat(boat_id)` |
-| `trips` | `is_boat_member(boat_id)` | `can_edit_boat(boat_id)` |
+| `boats` | `private.is_boat_member(id)` | none (managed by migration / service role) |
+| `crew` | `private.is_boat_member(boat_id)` | `private.can_edit_boat(boat_id)` |
+| `trips` | `private.is_boat_member(boat_id)` | `private.can_edit_boat(boat_id)` |
 | `trip_passengers` | parent trip's boat passes `is_boat_member` | parent trip's boat passes `can_edit_boat` |
-| `boat_members` | `is_boat_member(boat_id)` | none — service role only |
+| `boat_members` | `private.is_boat_member(boat_id)` | none — service role only |
 | `allowed_emails` | requester is an `owner` of that boat | none — service role only |
 
 Granting no write policy on `boat_members` means a crew member cannot quietly add their friend, and cannot promote themselves.
+
+### Data API exposure — required, and easy to miss
+
+Since **2026-05-30**, new tables in `public` are **not** automatically exposed to the Supabase Data API, and this project was created 2026-07-25. RLS controls which *rows* are visible once a table is reachable; it does not make the table reachable. Without explicit grants, every query fails regardless of correct policies — which presents as a completely broken app with no obvious cause.
+
+The migration therefore ends with:
+
+```sql
+grant select                         on public.boats, public.boat_members to authenticated;
+grant select, insert, update, delete on public.crew, public.trips, public.trip_passengers to authenticated;
+grant select                         on public.allowed_emails to authenticated;
+```
+
+Nothing is ever granted to `anon`. There is no unauthenticated surface in this application, and RLS remains the row-level gate on top of these grants.
 
 **A user with no membership row is not blocked at the door.** They authenticate successfully and then see an application containing nothing they can read or write. Phase 1 gives them `/no-access` rather than a broken-looking empty list.
 
@@ -251,7 +275,7 @@ app/
   layout.tsx
   page.tsx                  redirect → /trips
   login/page.tsx            magic-link request form
-  auth/confirm/route.ts     token exchange → session cookie
+  auth/callback/route.ts    exchangeCodeForSession → session cookie
   auth/signout/route.ts
   no-access/page.tsx
   trips/
@@ -277,15 +301,17 @@ middleware.ts               session refresh + redirect unauthenticated → /logi
 
 ### Auth flow
 
-Magic link via `signInWithOtp`. The confirmation route uses `token_hash` + `verifyOtp` at `/auth/confirm`, which is Supabase's current documented pattern for `@supabase/ssr` and keeps the exchange server-side. This will be checked against live Supabase docs at implementation time before the route is written; if the guidance has moved to `code` + `exchangeCodeForSession`, that is a same-sized change to one route file and the email template step below drops away.
+Magic link via `signInWithOtp`, confirmed at **`/auth/callback` using `exchangeCodeForSession`** (PKCE, the `@supabase/ssr` default).
 
-**Dashboard steps required, not achievable from code:**
+This reverses the `token_hash` + `verifyOtp` approach originally written here. That pattern requires editing the magic-link email template to point at `/auth/confirm` — and per the changelog entry of **2026-06-03**, new Free-plan projects on Supabase's default SMTP cannot customise auth email templates. This organisation is on the `free` plan and the project was created 2026-07-25, so that route is closed unless a custom SMTP provider is configured.
 
-1. Site URL and redirect allowlist must include `http://localhost:3000` and the Vercel production domain.
-2. The magic-link email template must point at
-   `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`.
+The default template's `{{ .ConfirmationURL }}` sends the user to Supabase's verify endpoint, which redirects to our `redirect_to` with a `code` parameter. `/auth/callback` exchanges that code for a session cookie. This needs no template edit and works on the free plan today.
 
-Both are manual steps for you in the Supabase dashboard; I will call them out at the point they are needed rather than leaving sign-in mysteriously broken.
+Session validation uses **`supabase.auth.getClaims()`**, which current docs give as the way to protect pages. `getSession()` is never trusted in server code.
+
+**Dashboard step required, not achievable from code:** Site URL and the redirect allowlist must include `http://localhost:3000/**` and the Vercel production domain. This is the only manual auth step, and sign-in fails with a redirect error until it is done.
+
+`@supabase/ssr` and `@supabase/supabase-js` are pinned to exact versions with the lockfile committed. The `setAll(cookiesToSet, headers)` cookie signature has changed across recent releases, so the installed version's signature is verified before the middleware is written rather than assumed.
 
 ---
 
@@ -349,7 +375,9 @@ The boat row itself is seeded from spec §2: name "Alice May", make/model "Jeann
 ## 11. Definition of done
 
 - Migration applied; `list_tables` shows all six tables with RLS enabled
+- Data API grants verified — a signed-in member can actually `select` from `trips` (this is what catches the 2026-05-30 exposure change)
 - `get_advisors` reports no security findings
+- No `SECURITY DEFINER` function is callable from `public`
 - Vitest suite passes
 - RLS assertion script passes, including the viewer-cannot-insert case
 - Magic-link sign-in works end to end on a phone
