@@ -157,14 +157,20 @@ export function TripForm({
     { status: 'idle' },
   )
   const [restored, setRestored] = useState<TripFormValues | null>(null)
+  const [ready, setReady] = useState(false)
   const [queued, setQueued] = useState(false)
 
   // Restore anything stranded by a previous session without signal.
   useEffect(() => {
     let cancelled = false
-    loadDraft(draftKey).then((draft) => {
-      if (!cancelled && draft) setRestored(draft.values)
-    })
+    loadDraft(draftKey)
+      .then((draft) => {
+        if (cancelled) return
+        if (draft) setRestored(draft.values)
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true)
+      })
     return () => {
       cancelled = true
     }
@@ -177,7 +183,7 @@ export function TripForm({
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       event.preventDefault()
       const formData = new FormData(event.currentTarget)
-      queueDraft(draftKey, formData).then(() => setQueued(true))
+      void queueDraft(draftKey, formData).then(() => setQueued(true))
     }
   }
 
@@ -194,6 +200,19 @@ export function TripForm({
           its own once you have signal. You can close the app.
         </p>
       </Card>
+    )
+  }
+
+  // The fields are uncontrolled, and React only applies defaultValue at mount.
+  // Rendering before the stored draft has been read would leave the inputs
+  // showing blanks that no later render can correct — and the first keystroke
+  // would then overwrite the recovered draft with those blanks.
+  if (!ready) {
+    return (
+      <div
+        className="h-64 animate-pulse rounded-lg bg-hull-800/10 dark:bg-chart-100/5"
+        aria-hidden
+      />
     )
   }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { syncTripDraft } from '@/app/(app)/trips/actions'
 import {
   clearDraft,
@@ -25,12 +25,20 @@ const POLL_MS = 60_000
 export function DraftSyncBanner() {
   const [drafts, setDrafts] = useState<TripDraft[]>([])
   const [syncing, setSyncing] = useState(false)
+  const inFlight = useRef(false)
 
   const flush = useCallback(async () => {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       setDrafts(await listQueuedDrafts())
       return
     }
+
+    // Three triggers can overlap: the online event, the poll interval, and the
+    // button. A React state flag is not a mutex — it updates asynchronously, so
+    // a second run would read the same still-unclear draft and insert the trip
+    // twice. Trip inserts carry no idempotency key.
+    if (inFlight.current) return
+    inFlight.current = true
 
     setSyncing(true)
     try {
@@ -48,6 +56,7 @@ export function DraftSyncBanner() {
         }
       }
     } finally {
+      inFlight.current = false
       setSyncing(false)
       setDrafts(await listQueuedDrafts())
     }

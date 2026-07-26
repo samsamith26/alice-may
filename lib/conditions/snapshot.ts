@@ -204,12 +204,19 @@ export async function buildSnapshot(input: SnapshotInput): Promise<{
     return { snapshot: null, status: 'failed' }
   }
 
-  // Only reach for the observed reading when the model has nothing to say.
+  // Only reach for the observed reading when the model has nothing for the
+  // hour actually being recorded. Checking whether the whole day is null would
+  // skip the fallback whenever the model covers most of the day but happens to
+  // stop short of this trip's departure hour — which is exactly when the
+  // fallback is wanted, since per-variable forecast horizons differ.
+  const marineTimes = marine?.hourly?.time as string[] | undefined
+  const marineIndex = pickHourIndex(marineTimes, input.date, input.time)
   const modelledSst = marine?.hourly?.sea_surface_temperature
-  const needsObserved = !Array.isArray(modelledSst) || modelledSst.every((v) => v === null)
-  const observedWaterTempF = needsObserved
-    ? await fetchObservedWaterTempF(input.tideStationId, input.date)
-    : null
+  const sstAtHour = Array.isArray(modelledSst) ? modelledSst[marineIndex] : null
+  const observedWaterTempF =
+    typeof sstAtHour === 'number' && Number.isFinite(sstAtHour)
+      ? null
+      : await fetchObservedWaterTempF(input.tideStationId, input.date)
 
   const snapshot = assembleSnapshot(
     { marine, weather, tides, weatherEndpoint: endpoint, observedWaterTempF },

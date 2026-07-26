@@ -139,6 +139,9 @@ async function persistTrip(formData: FormData): Promise<PersistResult> {
 
   revalidatePath('/trips')
   revalidatePath('/')
+  // The detail route too, or an edit redirects straight back to a cached copy
+  // of the values that were just replaced.
+  revalidatePath(`/trips/${trip.id}`)
   return { ok: true, tripId: trip.id }
 }
 
@@ -175,8 +178,22 @@ export async function syncTripDraft(
         result.message ?? Object.values(result.fieldErrors ?? {})[0]?.[0] ?? 'Rejected',
     }
   } catch (error) {
+    // requireCrew() redirects by throwing. Swallowing that would leave a
+    // signed-out or demoted user's draft retrying forever instead of sending
+    // them to sign in again.
+    if (isRedirectError(error)) throw error
     return { ok: false, message: error instanceof Error ? error.message : 'Failed' }
   }
+}
+
+function isRedirectError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'digest' in error &&
+    typeof (error as { digest?: unknown }).digest === 'string' &&
+    (error as { digest: string }).digest.startsWith('NEXT_REDIRECT')
+  )
 }
 
 export async function refetchConditions(tripId: string): Promise<void> {
@@ -188,7 +205,12 @@ export async function refetchConditions(tripId: string): Promise<void> {
 export async function deleteTrip(tripId: string): Promise<void> {
   await requireCrew()
   const supabase = await createClient()
-  await supabase.from('trips').delete().eq('id', tripId)
+
+  const { error } = await supabase.from('trips').delete().eq('id', tripId)
+  // Redirecting regardless would tell the owner a trip was deleted when it is
+  // still there.
+  if (error) throw new Error(`Could not delete the trip: ${error.message}`)
+
   revalidatePath('/trips')
   revalidatePath('/')
   redirect('/trips')

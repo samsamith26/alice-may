@@ -60,9 +60,23 @@ export function summariseFleet(trips: TripMetrics[]): FleetSummary {
     { totalHours: 0, totalNm: 0, totalFuelGal: 0, totalCostUsd: 0 },
   )
 
+  // Efficiency aggregates only over trips that measured BOTH distance and
+  // fuel. Dividing the fleet's total distance by its total fuel would pair a
+  // trip that logged distance but no fuel with a different trip that logged
+  // fuel but no distance, and report the ratio of two unrelated numbers as if
+  // it meant something. Every field on a trip is optional, so that mismatch is
+  // ordinary data entry, not an edge case.
+  const measured = trips.reduce(
+    (acc, trip) =>
+      nonNegative(trip.distance_nm) && positive(trip.fuel_used_gal)
+        ? { nm: acc.nm + trip.distance_nm, gal: acc.gal + trip.fuel_used_gal }
+        : acc,
+    { nm: 0, gal: 0 },
+  )
+
   return {
     ...totals,
     tripCount: trips.length,
-    avgNmPerGal: nmPerGallon(totals.totalNm, totals.totalFuelGal),
+    avgNmPerGal: nmPerGallon(measured.nm, measured.gal),
   }
 }

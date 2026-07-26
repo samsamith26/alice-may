@@ -35,6 +35,14 @@ describe('niceTicks', () => {
     expect(ticks.length).toBeLessThan(100)
   })
 
+  it('keeps the baseline at zero when every value is zero', () => {
+    // Otherwise y(0) lands mid-plot and a bar of nought renders half height,
+    // implying spend or hours that never happened.
+    const ticks = niceTicks(0, 0, 4)
+    expect(ticks[0]).toBe(0)
+    expect(ticks[ticks.length - 1]).toBeGreaterThan(0)
+  })
+
   it('survives non-finite input', () => {
     expect(niceTicks(Number.NaN, 10, 5)).toEqual([0, 1])
   })

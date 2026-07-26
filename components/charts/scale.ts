@@ -15,9 +15,16 @@ export function niceTicks(min: number, max: number, count: number): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 1]
 
   if (min === max) {
-    const pad = Math.abs(min) > 0 ? Math.abs(min) * 0.1 : 1
-    min -= pad
-    max += pad
+    if (min === 0) {
+      // A series that is genuinely all zeroes must keep its baseline at zero.
+      // Padding to [-1, 1] would put y(0) at the middle of the plot and draw a
+      // half-height bar for a value of nought.
+      max = 1
+    } else {
+      const pad = Math.abs(min) * 0.1
+      min -= pad
+      max += pad
+    }
   }
 
   const rawStep = (max - min) / Math.max(1, count)

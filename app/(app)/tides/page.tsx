@@ -1,6 +1,7 @@
 import { requireMembership } from '@/lib/auth/membership'
 import { getBoat } from '@/lib/db/queries'
 import { fetchTides } from '@/lib/conditions/noaa'
+import { addDaysIso, todayInZone } from '@/lib/format/dates'
 import { Annotation, Card, EmptyState } from '@/components/ui/primitives'
 
 // Tide predictions for a fixed station do not change hour to hour, and this
@@ -8,12 +9,6 @@ import { Annotation, Card, EmptyState } from '@/components/ui/primitives'
 export const revalidate = 3600
 
 const DAYS_AHEAD = 6
-
-function isoDate(offsetDays: number): string {
-  const date = new Date()
-  date.setDate(date.getDate() + offsetDays)
-  return date.toISOString().slice(0, 10)
-}
 
 function clock(isoish: string): string {
   const time = isoish.split('T')[1] ?? ''
@@ -38,8 +33,10 @@ export default async function TidesPage() {
   const boat = await getBoat(membership.boatId)
   const station = boat?.tide_station_id ?? '9413450'
 
-  const todayIso = isoDate(0)
-  const payload = await fetchTides(station, todayIso, isoDate(DAYS_AHEAD))
+  // The server runs in UTC; the boat does not. Asking for the UTC date would
+  // start the table on tomorrow from about 5pm Pacific onwards.
+  const todayIso = todayInZone(new Date())
+  const payload = await fetchTides(station, todayIso, addDaysIso(todayIso, DAYS_AHEAD))
 
   const byDay = new Map<string, Array<{ time: string; height: number; type: string }>>()
   for (const row of payload?.predictions ?? []) {
