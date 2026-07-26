@@ -77,16 +77,23 @@ async function attachConditions(tripId: string): Promise<void> {
   }
 }
 
-export async function saveTrip(
-  _prev: TripFormState,
-  formData: FormData,
-): Promise<TripFormState> {
+type PersistResult =
+  | { ok: true; tripId: string }
+  | { ok: false; message?: string; fieldErrors?: Record<string, string[]> }
+
+/**
+ * Writes a trip and returns an outcome.
+ *
+ * Deliberately does not redirect: the offline sync path needs to know whether
+ * the write actually succeeded, and a redirect surfaces as a thrown control-flow
+ * exception that is indistinguishable from a genuine failure.
+ */
+async function persistTrip(formData: FormData): Promise<PersistResult> {
   const membership = await requireCrew()
 
   const parsed = tripSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
-    const flattened = z_flatten(parsed.error)
-    return { status: 'error', fieldErrors: flattened }
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
   }
 
   const supabase = await createClient()
@@ -108,7 +115,7 @@ export async function saveTrip(
         .single()
 
   if (error || !trip) {
-    return { status: 'error', message: error?.message ?? 'Could not save the trip.' }
+    return { ok: false, message: error?.message ?? 'Could not save the trip.' }
   }
 
   const crewIds = formData.getAll('crew_ids').map(String).filter(Boolean)
@@ -132,7 +139,44 @@ export async function saveTrip(
 
   revalidatePath('/trips')
   revalidatePath('/')
-  redirect(`/trips/${trip.id}`)
+  return { ok: true, tripId: trip.id }
+}
+
+export async function saveTrip(
+  _prev: TripFormState,
+  formData: FormData,
+): Promise<TripFormState> {
+  const result = await persistTrip(formData)
+
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message: result.message,
+      fieldErrors: result.fieldErrors,
+    }
+  }
+
+  redirect(`/trips/${result.tripId}`)
+}
+
+/**
+ * The offline flush path. Returns success as a value so the queue can tell a
+ * real failure from a redirect and keep the draft rather than dropping it.
+ */
+export async function syncTripDraft(
+  formData: FormData,
+): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const result = await persistTrip(formData)
+    if (result.ok) return { ok: true }
+    return {
+      ok: false,
+      message:
+        result.message ?? Object.values(result.fieldErrors ?? {})[0]?.[0] ?? 'Rejected',
+    }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'Failed' }
+  }
 }
 
 export async function refetchConditions(tripId: string): Promise<void> {
@@ -150,8 +194,8 @@ export async function deleteTrip(tripId: string): Promise<void> {
   redirect('/trips')
 }
 
-/** Zod 4 renamed the flatten helper; this keeps the shape the form expects. */
-function z_flatten(error: {
+/** Collapses Zod issues into the per-field shape the form renders. */
+function fieldErrorsFrom(error: {
   issues: Array<{ path: PropertyKey[]; message: string }>
 }): Record<string, string[]> {
   const fieldErrors: Record<string, string[]> = {}

@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import type { Role } from '@/lib/auth/membership'
+import type { Theme } from '@/app/theme/actions'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const PRIMARY = [
   { href: '/trips', label: 'Trips' },
@@ -81,7 +83,15 @@ export function NavTabs({ role, compact = false }: { role: Role; compact?: boole
   )
 }
 
-export function MoreMenu({ role, email }: { role: Role; email: string }) {
+export function MoreMenu({
+  role,
+  email,
+  theme,
+}: {
+  role: Role
+  email: string
+  theme: Theme
+}) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -131,6 +141,10 @@ export function MoreMenu({ role, email }: { role: Role; email: string }) {
               {item.label}
             </Link>
           ))}
+
+          <div className="mt-1.5 border-t border-chart-300/70 px-3 pb-1 pt-3 dark:border-hull-700/70">
+            <ThemeToggle current={theme} />
+          </div>
 
           <div className="mt-1.5 border-t border-chart-300/70 px-3 pb-1 pt-2 dark:border-hull-700/70">
             <p className="truncate text-xs text-hull-700/70 dark:text-chart-200/60">
