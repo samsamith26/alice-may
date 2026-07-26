@@ -14,6 +14,7 @@
 --   20260726161309  float_plan_public_rpc
 --   20260726161318  storage_buckets
 --   20260726161326  seed_maintenance_schedule
+--   20260726165505  split_write_policies_off_select
 
 -- ============================================================ core_access ==
 
@@ -199,8 +200,12 @@ create policy allowed_emails_delete on public.allowed_emails
 
 create policy crew_select on public.crew
   for select to authenticated using (app.is_member(boat_id));
-create policy crew_write on public.crew
-  for all to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy crew_insert on public.crew
+  for insert to authenticated with check (app.is_crew(boat_id));
+create policy crew_update on public.crew
+  for update to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy crew_delete on public.crew
+  for delete to authenticated using (app.is_crew(boat_id));
 
 -- New public tables are not auto-exposed to the Data API on this project;
 -- without these grants every query fails as a permission error.
@@ -294,15 +299,23 @@ alter table public.trip_passengers enable row level security;
 
 create policy trips_select on public.trips
   for select to authenticated using (app.is_member(boat_id));
-create policy trips_write on public.trips
-  for all to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy trips_insert on public.trips
+  for insert to authenticated with check (app.is_crew(boat_id));
+create policy trips_update on public.trips
+  for update to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy trips_delete on public.trips
+  for delete to authenticated using (app.is_crew(boat_id));
 
 create policy trip_passengers_select on public.trip_passengers
   for select to authenticated using (app.is_member(app.trip_boat(trip_id)));
-create policy trip_passengers_write on public.trip_passengers
-  for all to authenticated
+create policy trip_passengers_insert on public.trip_passengers
+  for insert to authenticated with check (app.is_crew(app.trip_boat(trip_id)));
+create policy trip_passengers_update on public.trip_passengers
+  for update to authenticated
   using (app.is_crew(app.trip_boat(trip_id)))
   with check (app.is_crew(app.trip_boat(trip_id)));
+create policy trip_passengers_delete on public.trip_passengers
+  for delete to authenticated using (app.is_crew(app.trip_boat(trip_id)));
 
 grant select, insert, update, delete on public.trips to authenticated;
 grant select, insert, update, delete on public.trip_passengers to authenticated;
@@ -421,52 +434,88 @@ alter table public.float_plan_crew enable row level security;
 
 create policy sched_select on public.maintenance_schedule
   for select to authenticated using (app.is_member(boat_id));
-create policy sched_write on public.maintenance_schedule
-  for all to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy sched_insert on public.maintenance_schedule
+  for insert to authenticated with check (app.is_crew(boat_id));
+create policy sched_update on public.maintenance_schedule
+  for update to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy sched_delete on public.maintenance_schedule
+  for delete to authenticated using (app.is_crew(boat_id));
 
 create policy mlog_select on public.maintenance_log
   for select to authenticated using (app.is_member(boat_id));
-create policy mlog_write on public.maintenance_log
-  for all to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy mlog_insert on public.maintenance_log
+  for insert to authenticated with check (app.is_crew(boat_id));
+create policy mlog_update on public.maintenance_log
+  for update to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy mlog_delete on public.maintenance_log
+  for delete to authenticated using (app.is_crew(boat_id));
 
 create policy docs_select on public.documents
   for select to authenticated using (app.is_member(boat_id));
-create policy docs_write on public.documents
-  for all to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy docs_insert on public.documents
+  for insert to authenticated with check (app.is_crew(boat_id));
+create policy docs_update on public.documents
+  for update to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy docs_delete on public.documents
+  for delete to authenticated using (app.is_crew(boat_id));
 
 create policy poi_select on public.points_of_interest
   for select to authenticated using (app.is_member(boat_id));
-create policy poi_write on public.points_of_interest
-  for all to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy poi_insert on public.points_of_interest
+  for insert to authenticated with check (app.is_crew(boat_id));
+create policy poi_update on public.points_of_interest
+  for update to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy poi_delete on public.points_of_interest
+  for delete to authenticated using (app.is_crew(boat_id));
 
 create policy trip_sites_select on public.trip_sites
   for select to authenticated using (app.is_member(app.trip_boat(trip_id)));
-create policy trip_sites_write on public.trip_sites
-  for all to authenticated
+create policy trip_sites_insert on public.trip_sites
+  for insert to authenticated with check (app.is_crew(app.trip_boat(trip_id)));
+create policy trip_sites_update on public.trip_sites
+  for update to authenticated
   using (app.is_crew(app.trip_boat(trip_id)))
   with check (app.is_crew(app.trip_boat(trip_id)));
+create policy trip_sites_delete on public.trip_sites
+  for delete to authenticated using (app.is_crew(app.trip_boat(trip_id)));
 
 create policy trip_photos_select on public.trip_photos
   for select to authenticated using (app.is_member(app.trip_boat(trip_id)));
-create policy trip_photos_write on public.trip_photos
-  for all to authenticated
+create policy trip_photos_insert on public.trip_photos
+  for insert to authenticated with check (app.is_crew(app.trip_boat(trip_id)));
+create policy trip_photos_update on public.trip_photos
+  for update to authenticated
   using (app.is_crew(app.trip_boat(trip_id)))
   with check (app.is_crew(app.trip_boat(trip_id)));
+create policy trip_photos_delete on public.trip_photos
+  for delete to authenticated using (app.is_crew(app.trip_boat(trip_id)));
 
 create policy fp_select on public.float_plans
   for select to authenticated using (app.is_member(boat_id));
-create policy fp_write on public.float_plans
-  for all to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy fp_insert on public.float_plans
+  for insert to authenticated with check (app.is_crew(boat_id));
+create policy fp_update on public.float_plans
+  for update to authenticated using (app.is_crew(boat_id)) with check (app.is_crew(boat_id));
+create policy fp_delete on public.float_plans
+  for delete to authenticated using (app.is_crew(boat_id));
 
 create policy fpc_select on public.float_plan_crew
   for select to authenticated
   using (exists (select 1 from public.float_plans f
                  where f.id = float_plan_id and app.is_member(f.boat_id)));
-create policy fpc_write on public.float_plan_crew
-  for all to authenticated
+create policy fpc_insert on public.float_plan_crew
+  for insert to authenticated
+  with check (exists (select 1 from public.float_plans f
+                 where f.id = float_plan_id and app.is_crew(f.boat_id)));
+create policy fpc_update on public.float_plan_crew
+  for update to authenticated
   using (exists (select 1 from public.float_plans f
                  where f.id = float_plan_id and app.is_crew(f.boat_id)))
   with check (exists (select 1 from public.float_plans f
+                 where f.id = float_plan_id and app.is_crew(f.boat_id)));
+create policy fpc_delete on public.float_plan_crew
+  for delete to authenticated
+  using (exists (select 1 from public.float_plans f
                  where f.id = float_plan_id and app.is_crew(f.boat_id)));
 
 grant select, insert, update, delete on public.maintenance_schedule to authenticated;
