@@ -14,6 +14,14 @@ A trip logbook where each entry captures the mechanics of the trip (hours, fuel,
 
 ## 2. Data model (Supabase Postgres)
 
+### `allowed_emails`
+Zero-SQL invite mechanism: add an email + role here, and a trigger on `auth.users` insert automatically grants membership when that person signs in via magic link for the first time.
+- `email`, `role` (`crew` or `viewer`)
+
+### `boat_members`
+Populated automatically by the trigger above — join between an authenticated user and their access role.
+- `user_id`, `boat_id`, `role` (`crew`: log/edit trips; `viewer`: read-only — boat specs, trip history, stats, float plans)
+
 ### `boats`
 Single row for now, but modeled as a table so you can add a second boat later without a rewrite.
 - `id`, `name` ("Alice May"), `make_model` ("Jeanneau Merry Fisher 795"), `year` (2009), `engine_make_model` ("Yamaha F200"), `fuel_capacity_gal`, `home_port` ("Monterey Harbor")
@@ -120,16 +128,16 @@ You're running: **superpowers, supabase, context7, frontend-design, code-review*
 
 ## 9. Initial prompt for Claude Code
 
-Paste this as your first message in the project directory:
+Paste this as your first message in the project directory (with only `.env.local` and `alice-may-logbook-spec.md` present):
 
-> I'm building "Alice May Logbook" — a personal boat logbook web app for my 2009 Jeanneau Merry Fisher 795 (Yamaha F200), moored in Monterey Harbor. Full spec is in `alice-may-logbook-spec.md` in this repo — read it before starting.
+> I'm building "Alice May Logbook" — a personal boat logbook web app for my family's 2009 Jeanneau Merry Fisher 795 (Yamaha F200), moored in Monterey Harbor. Full spec is in `alice-may-logbook-spec.md` — read it before starting.
 >
-> Stack: Next.js (App Router, TypeScript), Tailwind, Supabase (Postgres/Auth/Storage), deployed on Vercel. Use `@supabase/ssr` for auth (browser + server clients + middleware session refresh) — not the deprecated auth-helpers package. Use magic-link email auth.
+> **Access model**: two roles. `crew` can log and edit trips; `viewer` is read-only (boat specs, trip history, stats, float plans) — for family who want to follow along but don't go on the water. Getting people in should be zero-SQL after initial setup: an `allowed_emails` table (with a role column) plus a trigger on `auth.users` insert that grants membership automatically when someone's email matches and they sign in via magic link. I'll seed my own row and my dad's row now; everyone else gets added to the allowlist as needed, no manual DB work per person.
 >
-> Use the supabase plugin/MCP for all schema and migration work — implement the schema exactly as described in section 2 of the spec, with RLS enabled on every table (this is a personal app, but a small number of family/crew emails should also be able to read/write).
+> **Stack**: Next.js (App Router, TypeScript), Tailwind, Supabase (Postgres/Auth/Storage) via the supabase plugin/MCP for all schema and migration work, deployed on Vercel. Use `@supabase/ssr` for auth (browser + server clients, middleware session refresh) — not the deprecated auth-helpers package. RLS enabled on every table, enforcing the crew/viewer split. Use context7 explicitly for fast-moving library APIs (e.g. `@supabase/ssr`, Next.js App Router) rather than relying on training data.
 >
-> Start with Phase 1 from section 6 of the spec only: project scaffold, the Supabase schema migration for `boats`, `trips`, `crew`, and `trip_passengers`, and the trip entry form + trip list/detail view — mobile-first responsive, since I'll be logging trips from my phone at the helm. Don't build the weather auto-fetch, maintenance tracker, dashboards, or map yet — we'll do those as separate phases once this is reviewed and deployed.
+> **Before writing any code**: do your research — confirm current best practices for the Supabase/Next.js auth pattern above, and pull the exact API details for Open-Meteo (historical marine + weather) and the NOAA CO-OPS API for tide station 9413450 (Monterey), since those power the automatic conditions feature in section 3 of the spec. Then write CLAUDE.md at the repo root capturing: this is a solo/personal project, you should execute approved plans fully and autonomously without pausing for implementation-detail or execution-strategy confirmation (including across subagent handoffs), and the only things worth interrupting me for are genuine blockers needing information only I have — credentials, external account setup, or a real product-level tradeoff with no clear right answer. Routine engineering judgment calls are yours to make.
 >
-> Brainstorm and plan this with me before writing code, per your usual workflow.
+> **Then build the whole app in one pass** — all phases from section 6 of the spec (schema, trip CRUD, auto weather/tide conditions, maintenance tracker, fuel/cost dashboard, lifetime stats, dive site map, float plan, document vault, photos, dark mode, PWA polish) — not gated phase-by-phase with check-ins. Brainstorm and produce one overall plan up front, get my approval once, then execute start to finish. Run `/code-review` before declaring it done. Flag clearly if any single phase (like the map or PWA setup) turns out to need a real product decision from me, but otherwise just build it and show me the result.
 
-Then work phase by phase from section 6 — approve each plan before execution, and run `/code-review` before moving to the next phase.
+After it plans, review the plan once, approve it, and then let it run. If it starts pausing for routine confirmations again mid-build, point it back at CLAUDE.md rather than repeating the instruction from scratch each time.
