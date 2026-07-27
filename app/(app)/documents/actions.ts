@@ -3,23 +3,23 @@
 import { revalidatePath } from 'next/cache'
 import { requireCrew } from '@/lib/auth/membership'
 import { createClient } from '@/lib/supabase/server'
-import { DOCUMENT_BUCKET, objectPath } from '@/lib/storage/signed'
+import { DOCUMENT_BUCKET, isPathWithinBoat } from '@/lib/storage/paths'
 import { documentSchema } from '@/lib/validation/schemas'
-
-const MAX_BYTES = 10 * 1024 * 1024
-const ALLOWED = [
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/heic',
-]
 
 export type DocumentState =
   | { status: 'idle' }
   | { status: 'saved' }
   | { status: 'error'; message: string }
 
+/**
+ * Saves document metadata. The file itself is uploaded by the browser first
+ * and passed here as a storage path.
+ *
+ * The bytes do not travel through this action for the same reason trip photos
+ * do not: a server action caps its body at 1 MB and Vercel caps a serverless
+ * request near 4.5 MB, so a scanned registration would fail with an opaque
+ * server error before reaching Supabase.
+ */
 export async function saveDocument(
   _prev: DocumentState,
   formData: FormData,
@@ -34,28 +34,14 @@ export async function saveDocument(
     }
   }
 
-  const supabase = await createClient()
-  const file = formData.get('file')
-  let storagePath: string | null = null
-  let fileName: string | null = null
+  const storagePath = String(formData.get('storage_path') ?? '') || null
+  const fileName = String(formData.get('file_name') ?? '') || null
 
-  if (file instanceof File && file.size > 0) {
-    if (file.size > MAX_BYTES) {
-      return { status: 'error', message: 'That file is larger than 10 MB.' }
-    }
-    if (!ALLOWED.includes(file.type)) {
-      return { status: 'error', message: 'Upload a PDF or an image.' }
-    }
-
-    storagePath = objectPath(membership.boatId, 'documents', file.name)
-    const { error: uploadError } = await supabase.storage
-      .from(DOCUMENT_BUCKET)
-      .upload(storagePath, file, { contentType: file.type, upsert: false })
-
-    if (uploadError) return { status: 'error', message: uploadError.message }
-    fileName = file.name
+  if (storagePath && !isPathWithinBoat(storagePath, membership.boatId)) {
+    return { status: 'error', message: 'That file does not belong to this boat.' }
   }
 
+  const supabase = await createClient()
   const { id, ...values } = parsed.data
 
   const { error } = id

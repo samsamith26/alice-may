@@ -115,7 +115,7 @@ export default async function DocumentsPage() {
       {isCrew ? (
         <Card className="flex flex-col gap-4">
           <Annotation>Add a document</Annotation>
-          <DocumentForm />
+          <DocumentForm boatId={membership.boatId} />
         </Card>
       ) : null}
     </div>
