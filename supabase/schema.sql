@@ -16,6 +16,7 @@
 --   20260726161326  seed_maintenance_schedule
 --   20260726165505  split_write_policies_off_select
 --   20260727010614  maintenance_log_performed_by
+--   20260727181616  anode_interval_and_battery_schedules
 
 -- ============================================================ core_access ==
 
@@ -607,6 +608,13 @@ cross join (values
   ('Water pump impeller', null::numeric, 12),
   ('Spark plugs', 400::numeric, null::integer),
   ('Fuel filter', 200::numeric, 12),
-  ('Anodes / zincs', null::numeric, 6)
+  -- Anodes moved 6 -> 3 months by a later migration: the boat corrodes on a
+  -- mooring whether or not the engine runs, and a lower unit was already lost
+  -- to galvanic corrosion in 2025.
+  ('Anodes / zincs', null::numeric, 3),
+  -- Batteries: three-year replacement, time-based only.
+  ('House battery', null::numeric, 36),
+  ('Motor battery', null::numeric, 36),
+  ('Thruster battery', null::numeric, 36)
 ) as s(service_type, interval_hours, interval_months)
 where not exists (select 1 from public.maintenance_schedule);
