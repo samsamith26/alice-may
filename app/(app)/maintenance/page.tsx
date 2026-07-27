@@ -4,12 +4,13 @@ import { getCurrentEngineHours } from '@/lib/db/queries'
 import { computeDueStatus } from '@/lib/maintenance/due'
 import { DueBanner } from '@/components/maintenance/DueBanner'
 import { ServiceForm } from '@/components/maintenance/ServiceForm'
+import { ServiceEntry } from '@/components/maintenance/ServiceEntry'
+import { ScheduleEditor } from '@/components/maintenance/ScheduleEditor'
 import {
   Annotation,
   Card,
   EmptyState,
   Pill,
-  Readout,
   StatTile,
 } from '@/components/ui/primitives'
 import { formatHours, formatMoney } from '@/lib/format/units'
@@ -86,10 +87,13 @@ export default async function MaintenancePage() {
       </div>
 
       {isCrew ? (
-        <Card className="flex flex-col gap-4">
-          <Annotation>Log a service</Annotation>
-          <ServiceForm serviceTypes={serviceTypes} currentHours={currentHours} />
-        </Card>
+        <>
+          <Card className="flex flex-col gap-4">
+            <Annotation>Log a service</Annotation>
+            <ServiceForm serviceTypes={serviceTypes} currentHours={currentHours} />
+          </Card>
+          <ScheduleEditor rows={schedules ?? []} />
+        </>
       ) : null}
 
       <div>
@@ -98,31 +102,11 @@ export default async function MaintenancePage() {
           <ul className="mt-2 flex flex-col gap-2">
             {log.map((entry) => (
               <li key={entry.id}>
-                <Card className="flex flex-col gap-1">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="font-medium">{entry.service_type}</span>
-                    <span className="readout text-sm opacity-70">
-                      {shortDate(entry.service_date)}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-x-5 text-sm">
-                    <span>
-                      <span className="opacity-60">At </span>
-                      <Readout value={formatHours(entry.engine_hours_at_service)} unit="h" />
-                    </span>
-                    {entry.cost !== null ? (
-                      <span>
-                        <span className="opacity-60">Cost </span>
-                        <Readout value={formatMoney(entry.cost)} />
-                      </span>
-                    ) : null}
-                  </div>
-                  {entry.notes ? (
-                    <p className="mt-1 whitespace-pre-wrap text-sm opacity-80">
-                      {entry.notes}
-                    </p>
-                  ) : null}
-                </Card>
+                <ServiceEntry
+                  entry={entry}
+                  serviceTypes={serviceTypes}
+                  canEdit={isCrew}
+                />
               </li>
             ))}
           </ul>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useEffect } from 'react'
 import { logService, type ServiceState } from '@/app/(app)/maintenance/actions'
 import {
   Button,
@@ -11,27 +11,60 @@ import {
   Textarea,
 } from '@/components/ui/primitives'
 
+export type ServiceEntryValues = {
+  id: string
+  service_date: string
+  service_type: string
+  engine_hours_at_service: number | null
+  cost: number | null
+  notes: string | null
+}
+
 export function ServiceForm({
   serviceTypes,
   currentHours,
+  entry,
+  onSaved,
+  onCancel,
 }: {
   serviceTypes: string[]
   currentHours: number | null
+  /** Present when editing an existing entry rather than logging a new one. */
+  entry?: ServiceEntryValues
+  onSaved?: () => void
+  onCancel?: () => void
 }) {
   const [state, formAction, pending] = useActionState<ServiceState, FormData>(
     logService,
     { status: 'idle' },
   )
 
+  useEffect(() => {
+    if (state.status === 'saved') onSaved?.()
+  }, [state.status, onSaved])
+
+  // An entry may name a service type that is no longer on the schedule; keep it
+  // selectable so editing an old record cannot silently rewrite what was done.
+  const options =
+    entry && !serviceTypes.includes(entry.service_type)
+      ? [...serviceTypes, entry.service_type]
+      : serviceTypes
+
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      <input type="hidden" name="id" defaultValue={entry?.id ?? ''} />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="What was done">
-          <Select name="service_type" required defaultValue="">
+          <Select
+            name="service_type"
+            required
+            defaultValue={entry?.service_type ?? ''}
+          >
             <option value="" disabled>
               Pick a service
             </option>
-            {serviceTypes.map((type) => (
+            {options.map((type) => (
               <option key={type} value={type}>
                 {type}
               </option>
@@ -44,7 +77,7 @@ export function ServiceForm({
             name="service_date"
             type="date"
             required
-            defaultValue={new Date().toISOString().slice(0, 10)}
+            defaultValue={entry?.service_date ?? new Date().toISOString().slice(0, 10)}
           />
         </Field>
       </div>
@@ -52,31 +85,46 @@ export function ServiceForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <Field
           label="Engine hours"
-          hint={currentHours !== null ? `Latest logged: ${currentHours}` : undefined}
+          hint={
+            entry || currentHours === null
+              ? undefined
+              : `Latest logged: ${currentHours}`
+          }
         >
           <NumberInput
             name="engine_hours_at_service"
             step="0.1"
-            defaultValue={currentHours ?? ''}
+            defaultValue={entry?.engine_hours_at_service ?? currentHours ?? ''}
           />
         </Field>
         <Field label="Cost">
-          <NumberInput name="cost" step="0.01" />
+          <NumberInput name="cost" step="0.01" defaultValue={entry?.cost ?? ''} />
         </Field>
       </div>
 
       <Field label="Notes">
-        <Textarea name="notes" placeholder="Parts used, who did it, anything noticed." />
+        <Textarea
+          name="notes"
+          defaultValue={entry?.notes ?? ''}
+          placeholder="Parts used, who did it, anything noticed."
+        />
       </Field>
 
-      <Button type="submit" disabled={pending}>
-        {pending ? 'Saving…' : 'Log service'}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Saving…' : entry ? 'Save changes' : 'Log service'}
+        </Button>
+        {onCancel ? (
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+        ) : null}
+      </div>
 
       {state.status === 'error' ? (
         <p className="text-sm text-alarm-600 dark:text-alarm-500">{state.message}</p>
       ) : null}
-      {state.status === 'saved' ? (
+      {state.status === 'saved' && !entry ? (
         <p className="text-sm text-ok-600 dark:text-ok-500">Service logged.</p>
       ) : null}
     </form>

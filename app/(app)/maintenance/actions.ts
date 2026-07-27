@@ -42,7 +42,12 @@ export async function logService(
 export async function deleteServiceEntry(entryId: string): Promise<void> {
   await requireCrew()
   const supabase = await createClient()
-  await supabase.from('maintenance_log').delete().eq('id', entryId)
+
+  const { error } = await supabase.from('maintenance_log').delete().eq('id', entryId)
+  // Silently returning would make the row reappear on refresh with no
+  // explanation of why the delete "didn't take".
+  if (error) throw new Error(`Could not delete the entry: ${error.message}`)
+
   revalidatePath('/maintenance')
   revalidatePath('/')
 }
@@ -52,10 +57,23 @@ export async function saveScheduleIntervals(
   intervalHours: number | null,
   intervalMonths: number | null,
   active: boolean,
-): Promise<void> {
+): Promise<{ ok: boolean; message?: string }> {
   await requireCrew()
+
+  // The table's check constraint requires at least one interval; catching it
+  // here gives a sentence rather than a raw Postgres error.
+  if (intervalHours === null && intervalMonths === null) {
+    return { ok: false, message: 'Set an hour interval, a month interval, or both.' }
+  }
+  if (
+    (intervalHours !== null && intervalHours <= 0) ||
+    (intervalMonths !== null && intervalMonths <= 0)
+  ) {
+    return { ok: false, message: 'Intervals must be greater than zero.' }
+  }
+
   const supabase = await createClient()
-  await supabase
+  const { error } = await supabase
     .from('maintenance_schedule')
     .update({
       interval_hours: intervalHours,
@@ -63,6 +81,10 @@ export async function saveScheduleIntervals(
       active,
     })
     .eq('id', scheduleId)
+
+  if (error) return { ok: false, message: error.message }
+
   revalidatePath('/maintenance')
   revalidatePath('/')
+  return { ok: true }
 }
