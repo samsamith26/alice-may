@@ -17,6 +17,7 @@ export type ServiceEntryValues = {
   service_type: string
   engine_hours_at_service: number | null
   cost: number | null
+  performed_by: string | null
   notes: string | null
 }
 
@@ -102,11 +103,22 @@ export function ServiceForm({
         </Field>
       </div>
 
+      <Field
+        label="Performed by / where"
+        hint="Optional — a yard, a shop, or yourself."
+      >
+        <TextInput
+          name="performed_by"
+          defaultValue={entry?.performed_by ?? ''}
+          placeholder="Monterey Bay Boat Works, West Marine, self"
+        />
+      </Field>
+
       <Field label="Notes">
         <Textarea
           name="notes"
           defaultValue={entry?.notes ?? ''}
-          placeholder="Parts used, who did it, anything noticed."
+          placeholder="Parts used, anything noticed."
         />
       </Field>
 

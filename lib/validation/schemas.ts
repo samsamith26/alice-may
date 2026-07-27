@@ -92,6 +92,7 @@ export const maintenanceLogSchema = z.object({
   service_type: z.string().trim().min(1, 'Pick a service type').max(120),
   engine_hours_at_service: optionalNumber('Engine hours', 0),
   cost: optionalNumber('Cost', 0),
+  performed_by: optionalText,
   notes: optionalText,
 })
 

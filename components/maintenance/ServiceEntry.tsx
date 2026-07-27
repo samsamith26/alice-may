@@ -63,6 +63,12 @@ export function ServiceEntry({
             <Readout value={formatMoney(entry.cost)} />
           </span>
         ) : null}
+        {entry.performed_by ? (
+          <span>
+            <span className="opacity-60">By </span>
+            {entry.performed_by}
+          </span>
+        ) : null}
       </div>
 
       {entry.notes ? (

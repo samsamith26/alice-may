@@ -35,7 +35,9 @@ export default async function MaintenancePage() {
       .order('service_type'),
     supabase
       .from('maintenance_log')
-      .select('id, service_date, service_type, engine_hours_at_service, cost, notes')
+      .select(
+        'id, service_date, service_type, engine_hours_at_service, cost, performed_by, notes',
+      )
       .eq('boat_id', membership.boatId)
       .order('service_date', { ascending: false }),
     getCurrentEngineHours(membership.boatId),

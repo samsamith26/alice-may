@@ -15,6 +15,7 @@
 --   20260726161318  storage_buckets
 --   20260726161326  seed_maintenance_schedule
 --   20260726165505  split_write_policies_off_select
+--   20260727010614  maintenance_log_performed_by
 
 -- ============================================================ core_access ==
 
@@ -344,6 +345,9 @@ create table public.maintenance_log (
   service_type text not null,
   notes text,
   cost numeric(10,2),
+  -- Free text: who did the work or where. Distinct from created_by, which is
+  -- the auth user who typed the entry in. Added by a later migration.
+  performed_by text,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );

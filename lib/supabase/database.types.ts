@@ -294,6 +294,7 @@ export type Database = {
           engine_hours_at_service: number | null
           id: string
           notes: string | null
+          performed_by: string | null
           service_date: string
           service_type: string
         }
@@ -305,6 +306,7 @@ export type Database = {
           engine_hours_at_service?: number | null
           id?: string
           notes?: string | null
+          performed_by?: string | null
           service_date: string
           service_type: string
         }
@@ -316,6 +318,7 @@ export type Database = {
           engine_hours_at_service?: number | null
           id?: string
           notes?: string | null
+          performed_by?: string | null
           service_date?: string
           service_type?: string
         }
