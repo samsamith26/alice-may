@@ -13,8 +13,6 @@ export async function PhotoStrip({
   boatId: string
   canEdit: boolean
 }) {
-  void boatId
-
   const supabase = await createClient()
   const { data: photos } = await supabase
     .from('trip_photos')
@@ -60,7 +58,7 @@ export async function PhotoStrip({
         <p className="text-sm opacity-60">No photos on this trip.</p>
       )}
 
-      {canEdit ? <PhotoUpload tripId={tripId} /> : null}
+      {canEdit ? <PhotoUpload tripId={tripId} boatId={boatId} /> : null}
     </Card>
   )
 }

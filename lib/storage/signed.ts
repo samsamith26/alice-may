@@ -1,7 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 
-export const PHOTO_BUCKET = 'trip-photos'
-export const DOCUMENT_BUCKET = 'boat-documents'
+export {
+  PHOTO_BUCKET,
+  DOCUMENT_BUCKET,
+  MAX_UPLOAD_BYTES,
+  ALLOWED_IMAGE_TYPES,
+  ALLOWED_DOCUMENT_TYPES,
+  objectPath,
+  isPathWithinBoat,
+} from './paths'
 
 const DEFAULT_TTL_SECONDS = 3600
 
@@ -41,13 +48,4 @@ export async function signedUrls(
     if (row.path && row.signedUrl) pairs.push([row.path, row.signedUrl])
   }
   return new Map(pairs)
-}
-
-/**
- * Storage policies resolve membership from the first path segment, so the boat
- * id must lead. Getting this wrong denies every upload with no useful error.
- */
-export function objectPath(boatId: string, scope: string, fileName: string): string {
-  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
-  return `${boatId}/${scope}/${crypto.randomUUID()}-${safeName}`
 }
