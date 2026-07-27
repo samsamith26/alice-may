@@ -44,3 +44,6 @@ yarn-error.log*
 # supabase
 /supabase/.temp
 /supabase/.branches
+
+# backups contain the full logbook, including crew emergency contacts
+/backups/
