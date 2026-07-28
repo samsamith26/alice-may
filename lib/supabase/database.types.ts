@@ -335,29 +335,47 @@ export type Database = {
       maintenance_schedule: {
         Row: {
           active: boolean
+          annual_due_day: number | null
+          annual_due_month: number | null
           boat_id: string
+          category: string
           created_at: string
+          due_at_hours_override: number | null
+          due_on_date_override: string | null
           id: string
           interval_hours: number | null
           interval_months: number | null
+          override_anchor_date: string | null
           service_type: string
         }
         Insert: {
           active?: boolean
+          annual_due_day?: number | null
+          annual_due_month?: number | null
           boat_id: string
+          category?: string
           created_at?: string
+          due_at_hours_override?: number | null
+          due_on_date_override?: string | null
           id?: string
           interval_hours?: number | null
           interval_months?: number | null
+          override_anchor_date?: string | null
           service_type: string
         }
         Update: {
           active?: boolean
+          annual_due_day?: number | null
+          annual_due_month?: number | null
           boat_id?: string
+          category?: string
           created_at?: string
+          due_at_hours_override?: number | null
+          due_on_date_override?: string | null
           id?: string
           interval_hours?: number | null
           interval_months?: number | null
+          override_anchor_date?: string | null
           service_type?: string
         }
         Relationships: [

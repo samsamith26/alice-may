@@ -17,8 +17,10 @@
 --   20260726165505  split_write_policies_off_select
 --   20260727010614  maintenance_log_performed_by
 --   20260727181616  anode_interval_and_battery_schedules
---   20260728002216  trips_distance_statute_miles
---   20260728002946  fuel_readings_as_used_from_full
+--   20260727235246  trips_distance_statute_miles
+--   20260728002241  fuel_readings_as_used_from_full
+--   20260728005928  schedule_categories_and_due_overrides
+--   20260728005939  seed_recurring_bills
 
 -- ============================================================ core_access ==
 
@@ -627,3 +629,65 @@ cross join (values
   ('Thruster battery', null::numeric, 36)
 ) as s(service_type, interval_hours, interval_months)
 where not exists (select 1 from public.maintenance_schedule);
+
+-- ==================================== schedule_categories_and_due_overrides ==
+
+-- Two things a schedule row could not express before:
+--
+--   1. That it is a recurring bill rather than engine work. Same table, same
+--      log, same due maths — only the grouping on the page differs.
+--   2. That it falls due on a fixed calendar date every year. Rent is due on
+--      1 July whether or not it was paid last year, so "last done + interval"
+--      is the wrong rule for it.
+--
+-- Plus a manual override of the computed due point, for correcting an item or
+-- granting a one-off exception without touching the interval.
+
+alter table public.maintenance_schedule
+  add column category text not null default 'mechanical'
+    check (category in ('mechanical', 'bill')),
+  add column annual_due_month smallint
+    check (annual_due_month between 1 and 12),
+  add column annual_due_day smallint
+    check (annual_due_day between 1 and 31),
+  add column due_at_hours_override numeric(8,2),
+  add column due_on_date_override date,
+  -- The last service date the override was set against. When a newer entry is
+  -- logged the anchor stops matching and the override lapses, so a one-off
+  -- exception cannot silently pin an item's due date forever.
+  add column override_anchor_date date;
+
+-- A fixed annual date is now a third way to be due, so having neither interval
+-- is legitimate.
+alter table public.maintenance_schedule
+  drop constraint maintenance_schedule_has_interval;
+
+alter table public.maintenance_schedule
+  add constraint maintenance_schedule_has_rule check (
+    interval_hours is not null
+    or interval_months is not null
+    or (annual_due_month is not null and annual_due_day is not null)
+  ),
+  add constraint maintenance_schedule_annual_pair check (
+    (annual_due_month is null) = (annual_due_day is null)
+  );
+
+-- ======================================================= seed_recurring_bills ==
+
+-- The recurring payments that keep the boat in its slip and on the water.
+-- Guarded by service_type so re-running cannot duplicate them.
+insert into public.maintenance_schedule
+  (boat_id, service_type, category, annual_due_month, annual_due_day)
+select boats.id, bill.service_type, 'bill', bill.due_month, bill.due_day
+from public.boats
+cross join (values
+  ('Rent', 7, 1),
+  ('Parking pass', 1, 1),
+  ('Property tax', 8, 1)
+) as bill(service_type, due_month, due_day)
+where not exists (
+  select 1
+  from public.maintenance_schedule existing
+  where existing.boat_id = boats.id
+    and existing.service_type = bill.service_type
+);

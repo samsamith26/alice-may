@@ -124,7 +124,8 @@ export function ScheduleEditor({ rows }: { rows: ScheduleRow[] }) {
           <p className="text-sm text-hull-700/75 dark:text-chart-200/65">
             Whichever comes first triggers. Leave a box empty to ignore that
             measure — an impeller is seasonal, oil is hourly. Untick Tracked to
-            stop warning about a service without deleting its history.
+            stop warning about a service without deleting its history. Bills
+            recur on a fixed date instead, so they are not listed here.
           </p>
           <div className="flex flex-col gap-4">
             {rows.map((row) => (

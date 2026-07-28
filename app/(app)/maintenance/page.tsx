@@ -1,26 +1,23 @@
 import { requireMembership } from '@/lib/auth/membership'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentEngineHours } from '@/lib/db/queries'
-import { computeDueStatus } from '@/lib/maintenance/due'
+import { computeDueStatus, type ServiceCategory } from '@/lib/maintenance/due'
 import { DueBanner } from '@/components/maintenance/DueBanner'
 import { ServiceForm } from '@/components/maintenance/ServiceForm'
 import { ServiceEntry } from '@/components/maintenance/ServiceEntry'
+import { ScheduleCard } from '@/components/maintenance/ScheduleCard'
 import { ScheduleEditor } from '@/components/maintenance/ScheduleEditor'
 import {
   Annotation,
   Card,
   EmptyState,
-  Pill,
   StatTile,
 } from '@/components/ui/primitives'
 import { formatHours, formatMoney } from '@/lib/format/units'
 
-function shortDate(iso: string) {
-  return new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
+/** The column is a checked text column, so it arrives untyped. */
+function asCategory(value: string): ServiceCategory {
+  return value === 'bill' ? 'bill' : 'mechanical'
 }
 
 export default async function MaintenancePage() {
@@ -30,7 +27,9 @@ export default async function MaintenancePage() {
   const [{ data: schedules }, { data: log }, currentHours] = await Promise.all([
     supabase
       .from('maintenance_schedule')
-      .select('id, service_type, interval_hours, interval_months, active')
+      .select(
+        'id, service_type, category, interval_hours, interval_months, annual_due_month, annual_due_day, due_at_hours_override, due_on_date_override, override_anchor_date, active',
+      )
       .eq('boat_id', membership.boatId)
       .order('service_type'),
     supabase
@@ -43,8 +42,19 @@ export default async function MaintenancePage() {
     getCurrentEngineHours(membership.boatId),
   ])
 
-  const items = computeDueStatus(schedules ?? [], log ?? [], currentHours, new Date())
-  const serviceTypes = (schedules ?? []).map((row) => row.service_type)
+  const rows = (schedules ?? []).map((row) => ({
+    ...row,
+    category: asCategory(row.category),
+  }))
+
+  const items = computeDueStatus(rows, log ?? [], currentHours, new Date())
+  const mechanical = items.filter((item) => item.category === 'mechanical')
+  const bills = items.filter((item) => item.category === 'bill')
+
+  const serviceTypes = rows.map((row) => row.service_type)
+  const billTypes = rows
+    .filter((row) => row.category === 'bill')
+    .map((row) => row.service_type)
   const isCrew = membership.role === 'crew'
 
   return (
@@ -58,43 +68,45 @@ export default async function MaintenancePage() {
 
       <DueBanner items={items} />
 
-      <div>
-        <Annotation>Schedule</Annotation>
-        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-          {items.map((item) => (
-            <li key={item.serviceType}>
-              <Card className="flex flex-col gap-2">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-medium">{item.serviceType}</span>
-                  <Pill tone={item.status}>{item.status}</Pill>
-                </div>
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                  <dt className="opacity-60">Last done</dt>
-                  <dd className="readout">
-                    {item.lastServiceDate ? shortDate(item.lastServiceDate) : 'Never'}
-                  </dd>
-                  <dt className="opacity-60">Due at</dt>
-                  <dd className="readout">
-                    {item.dueAtHours !== null ? `${item.dueAtHours} h` : '—'}
-                  </dd>
-                  <dt className="opacity-60">Due by</dt>
-                  <dd className="readout">
-                    {item.dueOnDate ? shortDate(item.dueOnDate) : '—'}
-                  </dd>
-                </dl>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {mechanical.length > 0 ? (
+        <div>
+          <Annotation>Maintenance</Annotation>
+          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+            {mechanical.map((item) => (
+              <li key={item.serviceType}>
+                <ScheduleCard item={item} canEdit={isCrew} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {bills.length > 0 ? (
+        <div>
+          <Annotation>Recurring bills</Annotation>
+          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+            {bills.map((item) => (
+              <li key={item.serviceType}>
+                <ScheduleCard item={item} canEdit={isCrew} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {isCrew ? (
         <>
           <Card className="flex flex-col gap-4">
-            <Annotation>Log a service</Annotation>
-            <ServiceForm serviceTypes={serviceTypes} currentHours={currentHours} />
+            <Annotation>Log a service or payment</Annotation>
+            <ServiceForm
+              serviceTypes={serviceTypes}
+              billTypes={billTypes}
+              currentHours={currentHours}
+            />
           </Card>
-          <ScheduleEditor rows={schedules ?? []} />
+          <ScheduleEditor
+            rows={rows.filter((row) => row.category === 'mechanical')}
+          />
         </>
       ) : null}
 
@@ -107,6 +119,7 @@ export default async function MaintenancePage() {
                 <ServiceEntry
                   entry={entry}
                   serviceTypes={serviceTypes}
+                  billTypes={billTypes}
                   canEdit={isCrew}
                 />
               </li>

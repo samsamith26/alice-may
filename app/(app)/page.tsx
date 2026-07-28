@@ -32,7 +32,9 @@ export default async function DashboardPage() {
     getCurrentEngineHours(membership.boatId),
     supabase
       .from('maintenance_schedule')
-      .select('service_type, interval_hours, interval_months, active')
+      .select(
+        'id, service_type, category, interval_hours, interval_months, annual_due_month, annual_due_day, due_at_hours_override, due_on_date_override, override_anchor_date, active',
+      )
       .eq('boat_id', membership.boatId),
     supabase
       .from('maintenance_log')
@@ -52,7 +54,10 @@ export default async function DashboardPage() {
   ])
 
   const dueItems = computeDueStatus(
-    schedules ?? [],
+    (schedules ?? []).map((row) => ({
+      ...row,
+      category: row.category === 'bill' ? ('bill' as const) : ('mechanical' as const),
+    })),
     serviceLog ?? [],
     currentHours,
     new Date(),

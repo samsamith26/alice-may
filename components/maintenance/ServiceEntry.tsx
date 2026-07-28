@@ -17,12 +17,15 @@ function shortDate(iso: string) {
 export function ServiceEntry({
   entry,
   serviceTypes,
+  billTypes = [],
   canEdit,
 }: {
   entry: ServiceEntryValues
   serviceTypes: string[]
+  billTypes?: string[]
   canEdit: boolean
 }) {
+  const isBill = billTypes.includes(entry.service_type)
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, startDelete] = useTransition()
@@ -35,6 +38,7 @@ export function ServiceEntry({
         <ServiceForm
           entry={entry}
           serviceTypes={serviceTypes}
+          billTypes={billTypes}
           currentHours={null}
           onSaved={close}
           onCancel={close}
@@ -53,19 +57,21 @@ export function ServiceEntry({
       </div>
 
       <div className="flex flex-wrap gap-x-5 text-sm">
-        <span>
-          <span className="opacity-60">At </span>
-          <Readout value={formatHours(entry.engine_hours_at_service)} unit="h" />
-        </span>
+        {isBill ? null : (
+          <span>
+            <span className="opacity-60">At </span>
+            <Readout value={formatHours(entry.engine_hours_at_service)} unit="h" />
+          </span>
+        )}
         {entry.cost !== null ? (
           <span>
-            <span className="opacity-60">Cost </span>
+            <span className="opacity-60">{isBill ? 'Paid ' : 'Cost '}</span>
             <Readout value={formatMoney(entry.cost)} />
           </span>
         ) : null}
         {entry.performed_by ? (
           <span>
-            <span className="opacity-60">By </span>
+            <span className="opacity-60">{isBill ? 'To ' : 'By '}</span>
             {entry.performed_by}
           </span>
         ) : null}

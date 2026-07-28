@@ -3,7 +3,12 @@ import { Banner, Pill } from '@/components/ui/primitives'
 import type { DueItem } from '@/lib/maintenance/due'
 
 function phrase(item: DueItem): string {
-  if (item.lastServiceDate === null) return 'never logged'
+  // A fixed-date bill knows when it was due even with nothing ever logged
+  // against it, so only fall back to "never logged" when there is genuinely
+  // nothing to measure.
+  if (item.hoursRemaining === null && item.daysRemaining === null) {
+    return 'never logged'
+  }
 
   if (item.hoursRemaining !== null && item.hoursRemaining < 0) {
     return `${Math.abs(Math.round(item.hoursRemaining))} hours past due`
@@ -29,12 +34,21 @@ export function DueBanner({ items }: { items: DueItem[] }) {
     ? 'overdue'
     : 'soon'
 
+  // Calling an unpaid slip fee a "service" would be wrong, and so would calling
+  // a missed oil change a "payment". Only claim the specific noun when
+  // everything listed is of one kind.
+  const subject = needsAttention.every((item) => item.category === 'bill')
+    ? 'Payment'
+    : needsAttention.every((item) => item.category === 'mechanical')
+      ? 'Service'
+      : 'Upkeep'
+
   return (
     <Banner tone={worst}>
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
           <span className="font-semibold">
-            {worst === 'overdue' ? 'Service overdue' : 'Service due soon'}
+            {worst === 'overdue' ? `${subject} overdue` : `${subject} due soon`}
           </span>
           <Link
             href="/maintenance"
