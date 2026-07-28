@@ -163,7 +163,8 @@ export function Button({
   )
 }
 
-const CONTROL =
+/** Shared so anything that has to sit in a field row matches a real input. */
+export const CONTROL =
   'min-h-12 w-full rounded-md border border-hull-800/25 bg-white px-3 text-lg text-hull-950 placeholder:text-hull-700/40 dark:border-chart-200/20 dark:bg-hull-900 dark:text-chart-100'
 
 export function Field({

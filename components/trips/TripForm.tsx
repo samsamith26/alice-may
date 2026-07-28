@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useId, useState } from 'react'
+import { useActionState, useEffect, useId, useRef, useState } from 'react'
 import { saveTrip, type TripFormState } from '@/app/(app)/trips/actions'
 import {
   Annotation,
@@ -12,6 +12,7 @@ import {
   Textarea,
 } from '@/components/ui/primitives'
 import { clearDraft, loadDraft, queueDraft, saveDraft } from '@/lib/offline/drafts'
+import { CrewPicker } from './CrewPicker'
 import { DistanceFields } from './DistanceFields'
 
 export type TripFormValues = Record<string, string | null | undefined>
@@ -160,6 +161,7 @@ export function TripForm({
   const [restored, setRestored] = useState<TripFormValues | null>(null)
   const [ready, setReady] = useState(false)
   const [queued, setQueued] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
   // Restore anything stranded by a previous session without signal.
   useEffect(() => {
@@ -180,6 +182,10 @@ export function TripForm({
   const initial = { ...values, ...(restored ?? {}) }
   const errors = state.status === 'error' ? (state.fieldErrors ?? {}) : {}
 
+  // A stored draft keeps repeated keys as one space-delimited string.
+  const draftedCrewIds = initial.crew_ids?.split(' ').filter(Boolean)
+  const initialCrewIds = draftedCrewIds ?? selectedCrewIds
+
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       event.preventDefault()
@@ -190,6 +196,21 @@ export function TripForm({
 
   function onChange(event: React.FormEvent<HTMLFormElement>) {
     saveDraft(draftKey, new FormData(event.currentTarget))
+  }
+
+  /**
+   * The crew picker writes hidden inputs, and setting one of those fires no
+   * change event, so the autosave above never sees it. The next selection is
+   * spliced in by hand rather than read back off the form, because the hidden
+   * inputs have not re-rendered yet at this point.
+   */
+  function onCrewChange(next: string[]) {
+    const form = formRef.current
+    if (!form) return
+    const formData = new FormData(form)
+    formData.delete('crew_ids')
+    for (const id of next) formData.append('crew_ids', id)
+    saveDraft(draftKey, formData)
   }
 
   if (queued) {
@@ -219,6 +240,7 @@ export function TripForm({
 
   return (
     <form
+      ref={formRef}
       action={formAction}
       onSubmit={onSubmit}
       onChange={onChange}
@@ -361,11 +383,10 @@ export function TripForm({
       </Section>
 
       <Section title="Aboard">
-        <CheckboxGroup
-          name="crew_ids"
+        <CrewPicker
           options={crewOptions}
-          selected={selectedCrewIds}
-          emptyHint="No crew on the roster yet. Add people under More → Crew roster."
+          defaultSelected={initialCrewIds}
+          onSelectionChange={onCrewChange}
         />
       </Section>
 

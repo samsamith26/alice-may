@@ -93,6 +93,43 @@ export async function saveCrewMember(
   return { status: 'saved', message: `${parsed.data.name} saved.` }
 }
 
+export type CreateCrewResult =
+  | { ok: true; person: { id: string; name: string } }
+  | { ok: false; message: string }
+
+/**
+ * Add someone to the roster and hand back the created row.
+ *
+ * Separate from saveCrewMember because the trip form needs the new id to tick
+ * the person onto the trip straight away, and the emergency-contact fields are
+ * not worth asking for at the helm — the roster screen fills those in later.
+ */
+export async function createCrewMember(name: string): Promise<CreateCrewResult> {
+  const membership = await requireCrew()
+
+  const parsed = crewSchema.pick({ name: true }).safeParse({ name })
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? 'Enter a name.',
+    }
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('crew')
+    .insert({ name: parsed.data.name, boat_id: membership.boatId })
+    .select('id, name')
+    .single()
+
+  if (error || !data) {
+    return { ok: false, message: error?.message ?? 'Could not add them.' }
+  }
+
+  revalidatePath('/crew')
+  return { ok: true, person: data }
+}
+
 export async function deleteCrewMember(crewId: string): Promise<void> {
   await requireCrew()
   const supabase = await createClient()
