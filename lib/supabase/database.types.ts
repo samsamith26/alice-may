@@ -524,6 +524,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           departure_time: string | null
+          distance_mi: number | null
           distance_nm: number | null
           end_lat: number | null
           end_lng: number | null

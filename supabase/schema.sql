@@ -17,6 +17,7 @@
 --   20260726165505  split_write_policies_off_select
 --   20260727010614  maintenance_log_performed_by
 --   20260727181616  anode_interval_and_battery_schedules
+--   20260728002216  trips_distance_statute_miles
 
 -- ============================================================ core_access ==
 
@@ -253,6 +254,10 @@ create table public.trips (
     coalesce(fuel_added_gal, 0) * coalesce(fuel_price_per_gal, 0)
   ) stored,
   distance_nm numeric(8,2),
+  -- Statute miles for readers who think in them. Generated, so it cannot
+  -- drift from distance_nm, which stays canonical for NM/gal and stats.
+  -- Added by a later migration.
+  distance_mi numeric(8,2) generated always as (round(distance_nm * 1.15078, 2)) stored,
   start_lat double precision,
   start_lng double precision,
   end_lat double precision,

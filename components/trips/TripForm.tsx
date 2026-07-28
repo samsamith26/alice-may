@@ -12,6 +12,7 @@ import {
   Textarea,
 } from '@/components/ui/primitives'
 import { clearDraft, loadDraft, queueDraft, saveDraft } from '@/lib/offline/drafts'
+import { DistanceFields } from './DistanceFields'
 
 export type TripFormValues = Record<string, string | null | undefined>
 
@@ -316,26 +317,22 @@ export function TripForm({
             />
           </Field>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field
-            label="Price per gallon"
-            hint="Used for cost per trip and annual spend."
-            error={errors.fuel_price_per_gal?.[0]}
-          >
-            <NumberInput
-              name="fuel_price_per_gal"
-              step="0.001"
-              defaultValue={initial.fuel_price_per_gal ?? ''}
-            />
-          </Field>
-          <Field label="Distance (nm)" error={errors.distance_nm?.[0]}>
-            <NumberInput
-              name="distance_nm"
-              step="0.1"
-              defaultValue={initial.distance_nm ?? ''}
-            />
-          </Field>
-        </div>
+        <Field
+          label="Price per gallon"
+          hint="Used for cost per trip and annual spend."
+          error={errors.fuel_price_per_gal?.[0]}
+        >
+          <NumberInput
+            name="fuel_price_per_gal"
+            step="0.001"
+            defaultValue={initial.fuel_price_per_gal ?? ''}
+          />
+        </Field>
+
+        <DistanceFields
+          defaultNm={initial.distance_nm}
+          error={errors.distance_nm?.[0]}
+        />
       </Section>
 
       <Section title="Position">

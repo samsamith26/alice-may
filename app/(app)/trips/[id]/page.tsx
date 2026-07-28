@@ -49,7 +49,7 @@ export default async function TripDetailPage({
   const { data: trip } = await supabase
     .from('trips')
     .select(
-      'id, trip_date, departure_time, return_time, engine_hours_start, engine_hours_end, hours_run, fuel_level_start_gal, fuel_added_gal, fuel_level_end_gal, fuel_used_gal, fuel_price_per_gal, fuel_cost_usd, distance_nm, start_lat, start_lng, end_lat, end_lng, notes, conditions_snapshot, conditions_status, trip_passengers(crew(id, name)), trip_sites(points_of_interest(id, name, category))',
+      'id, trip_date, departure_time, return_time, engine_hours_start, engine_hours_end, hours_run, fuel_level_start_gal, fuel_added_gal, fuel_level_end_gal, fuel_used_gal, fuel_price_per_gal, fuel_cost_usd, distance_nm, distance_mi, start_lat, start_lng, end_lat, end_lng, notes, conditions_snapshot, conditions_status, trip_passengers(crew(id, name)), trip_sites(points_of_interest(id, name, category))',
     )
     .eq('id', id)
     .maybeSingle()
@@ -98,7 +98,16 @@ export default async function TripDetailPage({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Hours run" value={formatHours(trip.hours_run)} />
-        <StatTile label="Distance" value={formatDistance(trip.distance_nm)} unit="nm" />
+        <StatTile
+          label="Distance"
+          value={formatDistance(trip.distance_nm)}
+          unit="nm"
+          sub={
+            trip.distance_mi === null
+              ? undefined
+              : `${formatDistance(trip.distance_mi)} statute miles`
+          }
+        />
         <StatTile label="Fuel used" value={formatGallons(trip.fuel_used_gal)} unit="gal" />
         <StatTile
           label="Fuel cost"

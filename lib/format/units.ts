@@ -9,6 +9,34 @@ const COMPASS_POINTS = [
 
 export const EM_DASH = '—'
 
+/** Statute miles per nautical mile. Matches the database generated column. */
+export const NM_TO_STATUTE_MILES = 1.15078
+
+export function nmToStatuteMiles(nm: number): number {
+  return nm * NM_TO_STATUTE_MILES
+}
+
+export function statuteMilesToNm(miles: number): number {
+  return miles / NM_TO_STATUTE_MILES
+}
+
+/**
+ * Converts for display in a linked input, at the precision the field shows.
+ *
+ * Returns '' for anything unparseable so a half-typed value ('2.', '-') leaves
+ * the other field blank rather than filling it with NaN.
+ */
+export function convertForField(
+  raw: string,
+  convert: (value: number) => number,
+  decimals = 2,
+): string {
+  if (raw.trim() === '') return ''
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return ''
+  return String(Number(convert(parsed).toFixed(decimals)))
+}
+
 export function cToF(celsius: number): number {
   return (celsius * 9) / 5 + 32
 }
