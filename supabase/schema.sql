@@ -22,6 +22,7 @@
 --   20260728005928  schedule_categories_and_due_overrides
 --   20260728005939  seed_recurring_bills
 --   20260728013925  intervals_with_units_drop_overrides
+--   20260728015309  bills_return_to_fixed_annual_dates
 
 -- ============================================================ core_access ==
 
@@ -745,4 +746,59 @@ alter table public.maintenance_schedule
   ),
   add constraint maintenance_schedule_interval_pair check (
     (interval_count is null) = (interval_unit is null)
+  );
+
+-- ====================================== bills_return_to_fixed_annual_dates ==
+
+-- Two scheduling models, split by category.
+--
+-- Mechanical work is due at last done plus its interval: an oil change is a
+-- reaction to the last one, so the date moving with it is correct.
+--
+-- A bill is not. Rent falls due on 1 July because the harbour says so, and
+-- paying late does not move next year's date. Bills go back to a fixed
+-- calendar date, which is what they had before intervals were unified.
+--
+-- Manual overrides stay gone. A fixed date is a schedule rule, not an override
+-- of one, and both models remain fully computed.
+
+alter table public.maintenance_schedule
+  add column annual_due_month smallint
+    check (annual_due_month between 1 and 12),
+  add column annual_due_day smallint
+    check (annual_due_day between 1 and 31);
+
+-- Dropped before the backfill: clearing a bill's stand-in interval leaves it
+-- momentarily ruleless under the old check.
+alter table public.maintenance_schedule
+  drop constraint maintenance_schedule_has_interval;
+
+update public.maintenance_schedule
+set annual_due_month = bill.due_month,
+    annual_due_day = bill.due_day,
+    -- The one-year interval was standing in for the fixed date; it would now be
+    -- a second, contradictory rule on the same row.
+    interval_count = null,
+    interval_unit = null
+from (values
+  ('Rent', 7, 1),
+  ('Parking pass', 1, 1),
+  ('Property tax', 8, 1)
+) as bill(service_type, due_month, due_day)
+where public.maintenance_schedule.category = 'bill'
+  and public.maintenance_schedule.service_type = bill.service_type;
+
+alter table public.maintenance_schedule
+  add constraint maintenance_schedule_has_rule check (
+    interval_hours is not null
+    or (interval_count is not null and interval_unit is not null)
+    or (annual_due_month is not null and annual_due_day is not null)
+  ),
+  add constraint maintenance_schedule_annual_pair check (
+    (annual_due_month is null) = (annual_due_day is null)
+  ),
+  -- Every bill is dated, so the category and the rule cannot drift apart.
+  add constraint maintenance_schedule_bill_is_annual check (
+    category <> 'bill'
+    or (annual_due_month is not null and annual_due_day is not null)
   );

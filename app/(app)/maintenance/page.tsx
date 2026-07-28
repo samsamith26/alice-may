@@ -40,7 +40,7 @@ export default async function MaintenancePage() {
     supabase
       .from('maintenance_schedule')
       .select(
-        'id, service_type, category, interval_hours, interval_count, interval_unit, active',
+        'id, service_type, category, interval_hours, interval_count, interval_unit, annual_due_month, annual_due_day, active',
       )
       .eq('boat_id', membership.boatId)
       .order('service_type'),
@@ -77,6 +77,8 @@ export default async function MaintenancePage() {
         interval_hours: row.interval_hours,
         interval_count: row.interval_count,
         interval_unit: row.interval_unit,
+        annual_due_month: row.annual_due_month,
+        annual_due_day: row.annual_due_day,
         active: row.active,
       },
     ]),

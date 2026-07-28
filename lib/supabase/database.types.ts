@@ -335,6 +335,8 @@ export type Database = {
       maintenance_schedule: {
         Row: {
           active: boolean
+          annual_due_day: number | null
+          annual_due_month: number | null
           boat_id: string
           category: string
           created_at: string
@@ -346,6 +348,8 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          annual_due_day?: number | null
+          annual_due_month?: number | null
           boat_id: string
           category?: string
           created_at?: string
@@ -357,6 +361,8 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          annual_due_day?: number | null
+          annual_due_month?: number | null
           boat_id?: string
           category?: string
           created_at?: string

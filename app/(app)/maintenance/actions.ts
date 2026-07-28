@@ -110,3 +110,38 @@ export async function saveScheduleIntervals(
   revalidatePath('/')
   return { ok: true }
 }
+
+/**
+ * Change the calendar date a bill falls due on.
+ *
+ * The bill equivalent of an interval: it is the rule the due date is computed
+ * from, not a due date set by hand. Changing it moves every year's occurrence,
+ * which is the point — a harbour that moves its billing date moves it for good.
+ */
+export async function saveBillSchedule(
+  scheduleId: string,
+  month: number,
+  day: number,
+  active: boolean,
+): Promise<{ ok: boolean; message?: string }> {
+  await requireCrew()
+
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    return { ok: false, message: 'Pick a month.' }
+  }
+  if (!Number.isInteger(day) || day < 1 || day > 31) {
+    return { ok: false, message: 'The day must be between 1 and 31.' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('maintenance_schedule')
+    .update({ annual_due_month: month, annual_due_day: day, active })
+    .eq('id', scheduleId)
+
+  if (error) return { ok: false, message: error.message }
+
+  revalidatePath('/maintenance')
+  revalidatePath('/')
+  return { ok: true }
+}

@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { saveScheduleIntervals } from '@/app/(app)/maintenance/actions'
+import {
+  saveBillSchedule,
+  saveScheduleIntervals,
+} from '@/app/(app)/maintenance/actions'
 import {
   Button,
   Card,
@@ -16,6 +19,8 @@ export type ScheduleIntervals = {
   interval_hours: number | null
   interval_count: number | null
   interval_unit: IntervalUnit | null
+  annual_due_month: number | null
+  annual_due_day: number | null
   active: boolean
 }
 
@@ -24,6 +29,35 @@ const UNIT_LABELS: Record<IntervalUnit, [string, string]> = {
   week: ['week', 'weeks'],
   month: ['month', 'months'],
   year: ['year', 'years'],
+}
+
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+function ordinal(day: number): string {
+  if (day > 3 && day < 21) return `${day}th`
+  switch (day % 10) {
+    case 1:
+      return `${day}st`
+    case 2:
+      return `${day}nd`
+    case 3:
+      return `${day}rd`
+    default:
+      return `${day}th`
+  }
 }
 
 function shortDate(iso: string) {
@@ -40,8 +74,15 @@ function toNullableNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-/** "every 100 h · 3 months", or nothing if the item has no intervals at all. */
+/**
+ * How often the item comes round: "100 h · 3 months" for an interval, or
+ * "1 July" for a bill on a fixed date.
+ */
 function cadence(intervals: ScheduleIntervals): string {
+  if (intervals.annual_due_month !== null && intervals.annual_due_day !== null) {
+    return `${ordinal(intervals.annual_due_day)} ${MONTHS[intervals.annual_due_month - 1]}`
+  }
+
   const parts: string[] = []
   if (intervals.interval_hours !== null) {
     parts.push(`${intervals.interval_hours} h`)
@@ -56,11 +97,11 @@ function cadence(intervals: ScheduleIntervals): string {
 }
 
 /**
- * One schedule item, with its interval editable in place.
+ * One schedule item, with the rule behind its due date editable in place.
  *
- * The interval is the only thing that can be changed: due points are always
- * last done plus the interval, so there is nothing else to adjust and nothing
- * that can disagree with the log.
+ * Only the rule can be changed, never the due date itself — an interval for
+ * maintenance, a calendar date for a bill. Both produce their due point by
+ * computation, so nothing on the card can disagree with the log behind it.
  */
 export function ScheduleCard({
   item,
@@ -75,28 +116,31 @@ export function ScheduleCard({
   const [hours, setHours] = useState(intervals.interval_hours?.toString() ?? '')
   const [count, setCount] = useState(intervals.interval_count?.toString() ?? '')
   const [unit, setUnit] = useState<IntervalUnit>(intervals.interval_unit ?? 'month')
+  const [month, setMonth] = useState(intervals.annual_due_month ?? 1)
+  const [day, setDay] = useState((intervals.annual_due_day ?? 1).toString())
   const [active, setActive] = useState(intervals.active)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
-  // Hour intervals only mean something for the engine. A bill has no hours to
-  // run, so it gets the time interval alone.
-  const showHours = item.category === 'mechanical'
+  // A bill falls due on a date the harbour or the county sets; it has no
+  // interval and no engine hours to run.
+  const isBill = item.category === 'bill'
 
   function save() {
     setError(null)
     const scheduleId = item.scheduleId
     if (scheduleId === null) return
 
-    const nextCount = toNullableNumber(count)
     startTransition(async () => {
-      const result = await saveScheduleIntervals(
-        scheduleId,
-        showHours ? toNullableNumber(hours) : null,
-        nextCount,
-        nextCount === null ? null : unit,
-        active,
-      )
+      const result = isBill
+        ? await saveBillSchedule(scheduleId, month, Number(day), active)
+        : await saveScheduleIntervals(
+            scheduleId,
+            toNullableNumber(hours),
+            toNullableNumber(count),
+            toNullableNumber(count) === null ? null : unit,
+            active,
+          )
       if (!result.ok) {
         setError(result.message ?? 'Could not save.')
         return
@@ -115,21 +159,21 @@ export function ScheduleCard({
       </div>
 
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-        <dt className="opacity-60">{showHours ? 'Last done' : 'Last paid'}</dt>
+        <dt className="opacity-60">{isBill ? 'Last paid' : 'Last done'}</dt>
         <dd className="readout">
           {item.lastServiceDate ? shortDate(item.lastServiceDate) : 'Never'}
         </dd>
-        {showHours ? (
+        {isBill ? null : (
           <>
             <dt className="opacity-60">Due at</dt>
             <dd className="readout">
               {item.dueAtHours !== null ? `${item.dueAtHours} h` : '—'}
             </dd>
           </>
-        ) : null}
+        )}
         <dt className="opacity-60">Due by</dt>
         <dd className="readout">{item.dueOnDate ? shortDate(item.dueOnDate) : '—'}</dd>
-        <dt className="opacity-60">Every</dt>
+        <dt className="opacity-60">{isBill ? 'Every year on' : 'Every'}</dt>
         <dd className="readout">{summary === '' ? '—' : summary}</dd>
       </dl>
 
@@ -145,50 +189,76 @@ export function ScheduleCard({
             aria-expanded={open}
             className="self-start text-xs font-semibold text-magenta-600 underline underline-offset-2 dark:text-magenta-400"
           >
-            {open ? 'Close' : 'Change interval'}
+            {open ? 'Close' : isBill ? 'Change due date' : 'Change interval'}
           </button>
 
           {open ? (
             <div className="flex flex-col gap-3 border-t border-chart-300/60 pt-3 dark:border-hull-700/60">
               <p className="text-xs text-hull-700/75 dark:text-chart-200/65">
-                Due dates are worked out from the last one logged, so changing
-                this moves everything from here on. Leave a box empty to ignore
-                that measure.
+                {isBill
+                  ? 'This bill falls due on the same date every year. Paying early or late does not move it — only changing it here does.'
+                  : 'Due points are worked out from the last one logged, so changing this moves everything from here on. Leave a box empty to ignore that measure.'}
               </p>
 
-              {showHours ? (
-                <Field label="Every (hours)">
-                  <NumberInput
-                    step="1"
-                    value={hours}
-                    onChange={(event) => setHours(event.target.value)}
-                    placeholder="—"
-                  />
-                </Field>
-              ) : null}
+              {isBill ? (
+                <div className="grid grid-cols-[1.6fr_1fr] gap-2">
+                  <Field label="Month">
+                    <Select
+                      value={month}
+                      onChange={(event) => setMonth(Number(event.target.value))}
+                    >
+                      {MONTHS.map((name, index) => (
+                        <option key={name} value={index + 1}>
+                          {name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Day">
+                    <NumberInput
+                      step="1"
+                      min="1"
+                      max="31"
+                      value={day}
+                      onChange={(event) => setDay(event.target.value)}
+                    />
+                  </Field>
+                </div>
+              ) : (
+                <>
+                  <Field label="Every (hours)">
+                    <NumberInput
+                      step="1"
+                      value={hours}
+                      onChange={(event) => setHours(event.target.value)}
+                      placeholder="—"
+                    />
+                  </Field>
 
-              <div className="grid grid-cols-[1fr_1.3fr] gap-2">
-                <Field label="Every">
-                  <NumberInput
-                    step="1"
-                    min="1"
-                    value={count}
-                    onChange={(event) => setCount(event.target.value)}
-                    placeholder="—"
-                  />
-                </Field>
-                <Field label="Unit">
-                  <Select
-                    value={unit}
-                    onChange={(event) => setUnit(event.target.value as IntervalUnit)}
-                  >
-                    <option value="day">days</option>
-                    <option value="week">weeks</option>
-                    <option value="month">months</option>
-                    <option value="year">years</option>
-                  </Select>
-                </Field>
-              </div>
+                  <div className="grid grid-cols-[1fr_1.3fr] gap-2">
+                    <Field label="Every">
+                      <NumberInput
+                        step="1"
+                        min="1"
+                        value={count}
+                        onChange={(event) => setCount(event.target.value)}
+                        placeholder="—"
+                      />
+                    </Field>
+                    <Field label="Unit">
+                      <Select
+                        value={unit}
+                        onChange={(event) => setUnit(event.target.value as IntervalUnit)}
+                      >
+                        <option value="day">days</option>
+                        <option value="week">weeks</option>
+                        <option value="month">months</option>
+                        <option value="year">years</option>
+                      </Select>
+                    </Field>
+                  </div>
+                </>
+              )}
 
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
