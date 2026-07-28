@@ -18,6 +18,7 @@
 --   20260727010614  maintenance_log_performed_by
 --   20260727181616  anode_interval_and_battery_schedules
 --   20260728002216  trips_distance_statute_miles
+--   20260728002946  fuel_readings_as_used_from_full
 
 -- ============================================================ core_access ==
 
@@ -242,11 +243,14 @@ create table public.trips (
   engine_hours_start numeric(8,2),
   engine_hours_end numeric(8,2),
   hours_run numeric(8,2) generated always as (engine_hours_end - engine_hours_start) stored,
-  fuel_level_start_gal numeric(6,2),
+  -- Gallons used since the tank was last full, matching the helm gauge —
+  -- NOT gallons remaining. Renamed and re-meaning'd by a later migration.
+  fuel_from_full_start_gal numeric(6,2),
   fuel_added_gal numeric(6,2),
-  fuel_level_end_gal numeric(6,2),
+  fuel_from_full_end_gal numeric(6,2),
+  -- Tank capacity cancels out of this, so consumption needs no reference to it.
   fuel_used_gal numeric(6,2) generated always as (
-    (coalesce(fuel_level_start_gal, 0) + coalesce(fuel_added_gal, 0)) - fuel_level_end_gal
+    coalesce(fuel_added_gal, 0) + (fuel_from_full_end_gal - fuel_from_full_start_gal)
   ) stored,
   fuel_price_per_gal numeric(6,3),
   -- Money actually handed over at the pump, so fuel_added rather than fuel_used.

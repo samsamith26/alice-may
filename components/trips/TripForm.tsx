@@ -294,12 +294,20 @@ export function TripForm({
       </Section>
 
       <Section title="Fuel">
+        <p className="text-xs text-hull-700/75 dark:text-chart-200/65">
+          Read these straight off the helm fuel gauge: gallons used since the
+          tank was last full, not gallons remaining. A 72 gal tank with 60 in
+          it reads 12.
+        </p>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Gallons at start" error={errors.fuel_level_start_gal?.[0]}>
+          <Field
+            label="Gallons used at start (from full)"
+            error={errors.fuel_from_full_start_gal?.[0]}
+          >
             <NumberInput
-              name="fuel_level_start_gal"
+              name="fuel_from_full_start_gal"
               step="0.1"
-              defaultValue={initial.fuel_level_start_gal ?? ''}
+              defaultValue={initial.fuel_from_full_start_gal ?? ''}
             />
           </Field>
           <Field label="Gallons added" error={errors.fuel_added_gal?.[0]}>
@@ -309,11 +317,14 @@ export function TripForm({
               defaultValue={initial.fuel_added_gal ?? ''}
             />
           </Field>
-          <Field label="Gallons at end" error={errors.fuel_level_end_gal?.[0]}>
+          <Field
+            label="Gallons used at end (from full)"
+            error={errors.fuel_from_full_end_gal?.[0]}
+          >
             <NumberInput
-              name="fuel_level_end_gal"
+              name="fuel_from_full_end_gal"
               step="0.1"
-              defaultValue={initial.fuel_level_end_gal ?? ''}
+              defaultValue={initial.fuel_from_full_end_gal ?? ''}
             />
           </Field>
         </div>

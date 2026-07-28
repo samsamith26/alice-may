@@ -18,6 +18,7 @@ import {
   formatMoney,
 } from '@/lib/format/units'
 import { gallonsPerHour, nmPerGallon } from '@/lib/trips/derive'
+import { getBoat } from '@/lib/db/queries'
 import type { ConditionsSnapshot, ConditionsStatus } from '@/lib/conditions/types'
 
 function longDate(iso: string) {
@@ -49,7 +50,7 @@ export default async function TripDetailPage({
   const { data: trip } = await supabase
     .from('trips')
     .select(
-      'id, trip_date, departure_time, return_time, engine_hours_start, engine_hours_end, hours_run, fuel_level_start_gal, fuel_added_gal, fuel_level_end_gal, fuel_used_gal, fuel_price_per_gal, fuel_cost_usd, distance_nm, distance_mi, start_lat, start_lng, end_lat, end_lng, notes, conditions_snapshot, conditions_status, trip_passengers(crew(id, name)), trip_sites(points_of_interest(id, name, category))',
+      'id, trip_date, departure_time, return_time, engine_hours_start, engine_hours_end, hours_run, fuel_from_full_start_gal, fuel_added_gal, fuel_from_full_end_gal, fuel_used_gal, fuel_price_per_gal, fuel_cost_usd, distance_nm, distance_mi, start_lat, start_lng, end_lat, end_lng, notes, conditions_snapshot, conditions_status, trip_passengers(crew(id, name)), trip_sites(points_of_interest(id, name, category))',
     )
     .eq('id', id)
     .maybeSingle()
@@ -59,6 +60,14 @@ export default async function TripDetailPage({
   const isCrew = membership.role === 'crew'
   const efficiency = nmPerGallon(trip.distance_nm, trip.fuel_used_gal)
   const burnRate = gallonsPerHour(trip.fuel_used_gal, trip.hours_run)
+
+  // The gauge reads gallons used from full, so what is actually left needs the
+  // tank capacity — the one place capacity does not cancel out.
+  const boat = await getBoat(membership.boatId)
+  const gallonsLeft =
+    boat?.fuel_capacity_gal != null && trip.fuel_from_full_end_gal != null
+      ? boat.fuel_capacity_gal - trip.fuel_from_full_end_gal
+      : null
 
   const passengers = trip.trip_passengers
     .map((row) => row.crew)
@@ -130,8 +139,29 @@ export default async function TripDetailPage({
             <dd><Readout value={formatHours(trip.engine_hours_start)} /></dd>
             <dt className="opacity-70">Hours at end</dt>
             <dd><Readout value={formatHours(trip.engine_hours_end)} /></dd>
+            <dt className="opacity-70">Gauge at start</dt>
+            <dd>
+              <Readout
+                value={formatGallons(trip.fuel_from_full_start_gal)}
+                unit="gal used"
+              />
+            </dd>
+            <dt className="opacity-70">Gauge at end</dt>
+            <dd>
+              <Readout
+                value={formatGallons(trip.fuel_from_full_end_gal)}
+                unit="gal used"
+              />
+            </dd>
             <dt className="opacity-70">Fuel added</dt>
             <dd><Readout value={formatGallons(trip.fuel_added_gal)} unit="gal" /></dd>
+            <dt className="opacity-70">Left in tank</dt>
+            <dd>
+              <Readout
+                value={gallonsLeft === null ? '—' : formatGallons(gallonsLeft)}
+                unit={gallonsLeft === null ? undefined : 'gal'}
+              />
+            </dd>
             <dt className="opacity-70">Efficiency</dt>
             <dd>
               <Readout

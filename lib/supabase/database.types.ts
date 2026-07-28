@@ -532,8 +532,8 @@ export type Database = {
           engine_hours_start: number | null
           fuel_added_gal: number | null
           fuel_cost_usd: number | null
-          fuel_level_end_gal: number | null
-          fuel_level_start_gal: number | null
+          fuel_from_full_end_gal: number | null
+          fuel_from_full_start_gal: number | null
           fuel_price_per_gal: number | null
           fuel_used_gal: number | null
           hours_run: number | null
@@ -560,8 +560,8 @@ export type Database = {
           engine_hours_end?: number | null
           engine_hours_start?: number | null
           fuel_added_gal?: number | null
-          fuel_level_end_gal?: number | null
-          fuel_level_start_gal?: number | null
+          fuel_from_full_end_gal?: number | null
+          fuel_from_full_start_gal?: number | null
           fuel_price_per_gal?: number | null
           id?: string
           notes?: string | null
@@ -586,8 +586,8 @@ export type Database = {
           engine_hours_end?: number | null
           engine_hours_start?: number | null
           fuel_added_gal?: number | null
-          fuel_level_end_gal?: number | null
-          fuel_level_start_gal?: number | null
+          fuel_from_full_end_gal?: number | null
+          fuel_from_full_start_gal?: number | null
           fuel_price_per_gal?: number | null
           id?: string
           notes?: string | null

@@ -17,7 +17,7 @@ export default async function EditTripPage({
     supabase
       .from('trips')
       .select(
-        'id, trip_date, departure_time, return_time, engine_hours_start, engine_hours_end, fuel_level_start_gal, fuel_added_gal, fuel_level_end_gal, fuel_price_per_gal, distance_nm, start_lat, start_lng, end_lat, end_lng, notes, trip_passengers(crew_id), trip_sites(site_id)',
+        'id, trip_date, departure_time, return_time, engine_hours_start, engine_hours_end, fuel_from_full_start_gal, fuel_added_gal, fuel_from_full_end_gal, fuel_price_per_gal, distance_nm, start_lat, start_lng, end_lat, end_lng, notes, trip_passengers(crew_id), trip_sites(site_id)',
       )
       .eq('id', id)
       .maybeSingle(),
