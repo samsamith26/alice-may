@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    The 16-pixel anchor, drawn on the pixel grid rather than shrunk onto it.
+
+    Downscaling the full artwork to 16 turned the shank, stock and arms into a
+    single pale smudge: every stroke landed near one pixel and every gap landed
+    under one. Here the grid is 32 units to the pixel and the whole mark is
+    built from whole-pixel blocks, so nothing is left for the rasteriser to
+    average away. Curves are gone — at this size a two-pixel U reads as an
+    anchor and a curve reads as fuzz — and the shackle is a solid dot, because
+    a ring cannot exist in two pixels.
+
+    Same three tokens, same silhouette, fewer parts. Used for the 16px entry of
+    favicon.ico only; every larger size comes from app-icon.svg.
+
+    Columns and rows below are 16ths, counted from zero.
+  -->
+  <rect width="512" height="512" fill="#0b2033"/>
+
+  <!-- Shackle, cols 7-8, rows 1-2. The one magenta thing. -->
+  <rect x="224" y="32" width="64" height="64" fill="#c22e6f"/>
+
+  <!-- Stock, cols 3-12, rows 4-5. -->
+  <rect x="96" y="128" width="320" height="64" fill="#f2ecdd"/>
+
+  <!-- Shank, cols 7-8, rows 4-13, meeting the bottom of the arms. -->
+  <rect x="224" y="128" width="64" height="320" fill="#f2ecdd"/>
+
+  <!-- Arms, as three blocks: down the left, across, up the right. -->
+  <rect x="64" y="288" width="64" height="128" fill="#f2ecdd"/>
+  <rect x="64" y="384" width="384" height="64" fill="#f2ecdd"/>
+  <rect x="384" y="288" width="64" height="128" fill="#f2ecdd"/>
+
+  <!-- Flukes, overlapping the arm tops by a pixel so they read as attached. -->
+  <rect x="32" y="256" width="64" height="64" fill="#f2ecdd"/>
+  <rect x="416" y="256" width="64" height="64" fill="#f2ecdd"/>
+</svg>

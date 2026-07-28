@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Alice May app icon.
+
+    Drawn for 16 pixels first and scaled up, not the other way round. The app's
+    compass rose is its signature on screen, but a rose is fine linework: at
+    tab size its rings fall below a pixel and turn to grey haze. An anchor is
+    silhouette, and silhouette is all that survives down there.
+
+    Colours are the app's own tokens. Chart magenta appears once, on the
+    shackle, because on a real chart magenta means "this is the bit that
+    matters" rather than "this looked nice".
+
+    Full bleed and square on purpose: Android masks maskable icons to its own
+    shape and any rounding of ours would show up inside the mask, while iOS
+    rounds the corners itself. Artwork sits within a 200-unit radius of centre
+    so it still clears Android's safe circle once padded.
+  -->
+  <rect width="512" height="512" fill="#0b2033"/>
+
+  <g fill="none" stroke="#f2ecdd" stroke-width="36" stroke-linecap="round">
+    <!-- Shank, from under the shackle to the crown. -->
+    <path d="M256 138 L256 418"/>
+    <!-- Arms, sweeping up to the flukes. -->
+    <path d="M118 300 C118 380 180 424 256 424 C332 424 394 380 394 300"/>
+  </g>
+
+  <!-- Stock. Slightly lighter than the shank so the cross reads as a cross. -->
+  <path d="M156 190 L356 190" fill="none" stroke="#f2ecdd" stroke-width="32"
+        stroke-linecap="round"/>
+
+  <!-- Flukes: solid, because at small sizes mass reads and outline does not. -->
+  <path d="M118 300 L78 234 L168 254 Z" fill="#f2ecdd"/>
+  <path d="M394 300 L434 234 L344 254 Z" fill="#f2ecdd"/>
+
+  <!-- Shackle. The one magenta thing. -->
+  <circle cx="256" cy="100" r="32" fill="none" stroke="#c22e6f" stroke-width="24"/>
+</svg>
