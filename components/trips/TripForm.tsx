@@ -296,8 +296,7 @@ export function TripForm({
       <Section title="Fuel">
         <p className="text-xs text-hull-700/75 dark:text-chart-200/65">
           Read these straight off the helm fuel gauge: gallons used since the
-          tank was last full, not gallons remaining. A 72 gal tank with 60 in
-          it reads 12.
+          tank was last full, not gallons remaining.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field
