@@ -6,6 +6,7 @@ import { requireCrew } from '@/lib/auth/membership'
 import { createClient } from '@/lib/supabase/server'
 import { buildSnapshot } from '@/lib/conditions/snapshot'
 import { tripSchema } from '@/lib/validation/schemas'
+import { uuidsOnly } from '@/lib/validation/ids'
 
 export type TripFormState =
   | { status: 'idle' }
@@ -98,6 +99,21 @@ type PersistResult =
     }
 
 /**
+ * The picked crew and site ids, keeping only things actually shaped like ids.
+ *
+ * These arrive as repeated form fields rather than through the trip schema, and
+ * used to go to the database exactly as received. One malformed value was
+ * enough to fail the whole insert, which is how a trip came to be saved with
+ * nobody aboard: a stray NUL character in one id made the request body invalid
+ * JSON as far as Postgres was concerned, and it rejected every row in the
+ * batch rather than the one bad value. Anything not shaped like an id was never
+ * a real person or place, so dropping it loses nothing and keeps the rest.
+ */
+function idList(formData: FormData, field: string): string[] {
+  return uuidsOnly(formData.getAll(field).map(String))
+}
+
+/**
  * Replace who was aboard, wholesale.
  *
  * Returns a message on failure rather than throwing, so a half-written trip
@@ -181,8 +197,8 @@ async function persistTrip(formData: FormData): Promise<PersistResult> {
     return { ok: false, message: error?.message ?? 'Could not save the trip.' }
   }
 
-  const crewIds = formData.getAll('crew_ids').map(String).filter(Boolean)
-  const siteIds = formData.getAll('site_ids').map(String).filter(Boolean)
+  const crewIds = idList(formData, 'crew_ids')
+  const siteIds = idList(formData, 'site_ids')
 
   // Reported rather than ignored. These failing used to leave the trip saved,
   // the redirect happening, and nobody aboard — with nothing anywhere saying

@@ -11,7 +11,14 @@ import {
   TextInput,
   Textarea,
 } from '@/components/ui/primitives'
-import { clearDraft, loadDraft, queueDraft, saveDraft } from '@/lib/offline/drafts'
+import {
+  clearDraft,
+  loadDraft,
+  queueDraft,
+  saveDraft,
+  type DraftValues,
+} from '@/lib/offline/drafts'
+import { uuidsOnly } from '@/lib/validation/ids'
 import { CrewPicker } from './CrewPicker'
 import { DistanceFields } from './DistanceFields'
 
@@ -158,7 +165,7 @@ export function TripForm({
     saveTrip,
     { status: 'idle' },
   )
-  const [restored, setRestored] = useState<TripFormValues | null>(null)
+  const [restored, setRestored] = useState<DraftValues | null>(null)
   const [ready, setReady] = useState(false)
   const [queued, setQueued] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
@@ -179,15 +186,23 @@ export function TripForm({
     }
   }, [draftKey])
 
-  const initial = { ...values, ...(restored ?? {}) }
+  // Every field a draft holds is a list. All but the pickers are single-valued,
+  // so they take the first entry.
+  const restoredSingles: TripFormValues = restored
+    ? Object.fromEntries(
+        Object.entries(restored).map(([field, list]) => [field, list[0] ?? '']),
+      )
+    : {}
+
+  const initial = { ...values, ...restoredSingles }
   const errors = state.status === 'error' ? (state.fieldErrors ?? {}) : {}
   // A save that got as far as writing the trip before failing. Retrying has to
   // update that row, not log the outing twice.
   const savedTripId = state.status === 'error' ? state.tripId : undefined
 
-  // A stored draft keeps repeated keys as one space-delimited string.
-  const draftedCrewIds = initial.crew_ids?.split(' ').filter(Boolean)
-  const initialCrewIds = draftedCrewIds ?? selectedCrewIds
+  const initialCrewIds = restored?.crew_ids
+    ? uuidsOnly(restored.crew_ids)
+    : selectedCrewIds
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
