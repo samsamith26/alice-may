@@ -9,6 +9,18 @@ import { compassPoint } from '@/lib/format/units'
  * cardinal name it came from spelled out beside it — the number alone is easy
  * to misread at a glance on deck.
  */
+/**
+ * Trigonometry is allowed to differ in its last bit between JavaScript engines,
+ * and the server and the browser are not running the same one. Unrounded, a
+ * tick lands on 50 in Node and 50.000000000000004 in the browser, React sees
+ * two different attributes for the same element, and the whole tree reports a
+ * hydration mismatch. Three decimals on a 100-unit viewBox is far finer than
+ * anything that can be seen.
+ */
+function place(value: number): number {
+  return Number(value.toFixed(3))
+}
+
 export function CompassRose({
   windDirDeg,
   windSpeedKn,
@@ -62,10 +74,10 @@ export function CompassRose({
         return (
           <line
             key={deg}
-            x1={centre + Math.cos(radians) * 46}
-            y1={centre + Math.sin(radians) * 46}
-            x2={centre + Math.cos(radians) * (46 - length)}
-            y2={centre + Math.sin(radians) * (46 - length)}
+            x1={place(centre + Math.cos(radians) * 46)}
+            y1={place(centre + Math.sin(radians) * 46)}
+            x2={place(centre + Math.cos(radians) * (46 - length))}
+            y2={place(centre + Math.sin(radians) * (46 - length))}
             className="stroke-hull-800/40 dark:stroke-chart-200/35"
             strokeWidth={major ? 1.2 : 0.6}
           />
@@ -77,8 +89,8 @@ export function CompassRose({
         return (
           <text
             key={label}
-            x={centre + Math.cos(radians) * 30}
-            y={centre + Math.sin(radians) * 30 + 2.6}
+            x={place(centre + Math.cos(radians) * 30)}
+            y={place(centre + Math.sin(radians) * 30 + 2.6)}
             textAnchor="middle"
             className="fill-hull-800/70 text-[7px] font-semibold dark:fill-chart-200/70"
           >

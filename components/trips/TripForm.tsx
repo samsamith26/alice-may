@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useActionState, useEffect, useId, useRef, useState } from 'react'
 import { saveTrip, type TripFormState } from '@/app/(app)/trips/actions'
 import {
@@ -13,6 +14,7 @@ import {
 } from '@/components/ui/primitives'
 import {
   clearDraft,
+  isDraftStale,
   loadDraft,
   queueDraft,
   saveDraft,
@@ -152,6 +154,7 @@ export function TripForm({
   siteOptions,
   selectedCrewIds = [],
   selectedSiteIds = [],
+  savedAt,
   draftKey,
 }: {
   values?: TripFormValues
@@ -159,6 +162,8 @@ export function TripForm({
   siteOptions: PickerOption[]
   selectedCrewIds?: string[]
   selectedSiteIds?: string[]
+  /** When this trip was last written, for judging whether a draft is stale. */
+  savedAt?: string | null
   draftKey: string
 }) {
   const [state, formAction, pending] = useActionState<TripFormState, FormData>(
@@ -169,14 +174,22 @@ export function TripForm({
   const [ready, setReady] = useState(false)
   const [queued, setQueued] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
+  const router = useRouter()
 
-  // Restore anything stranded by a previous session without signal.
+  // Restore anything stranded by a previous session without signal — but only
+  // if the server has not been given something newer in the meantime. A draft
+  // left behind by the last save used to outrank the trip itself, quietly
+  // reinstating an older list of who was aboard.
   useEffect(() => {
     let cancelled = false
     loadDraft(draftKey)
       .then((draft) => {
-        if (cancelled) return
-        if (draft) setRestored(draft.values)
+        if (cancelled || !draft) return
+        if (isDraftStale(draft, savedAt)) {
+          void clearDraft(draftKey)
+          return
+        }
+        setRestored(draft.values)
       })
       .finally(() => {
         if (!cancelled) setReady(true)
@@ -184,7 +197,18 @@ export function TripForm({
     return () => {
       cancelled = true
     }
-  }, [draftKey])
+  }, [draftKey, savedAt])
+
+  // The trip is written, so the scratchpad is spent. Clearing it here rather
+  // than relying on the timestamp comparison keeps this correct even if the
+  // phone's clock disagrees with the server's.
+  const navigated = useRef(false)
+  useEffect(() => {
+    if (state.status !== 'saved' || navigated.current) return
+    navigated.current = true
+    const { tripId } = state
+    void clearDraft(draftKey).finally(() => router.replace(`/trips/${tripId}`))
+  }, [state, draftKey, router])
 
   // Every field a draft holds is a list. All but the pickers are single-valued,
   // so they take the first entry.

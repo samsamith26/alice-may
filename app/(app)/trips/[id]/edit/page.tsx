@@ -17,7 +17,7 @@ export default async function EditTripPage({
     supabase
       .from('trips')
       .select(
-        'id, trip_date, departure_time, return_time, engine_hours_start, engine_hours_end, fuel_from_full_start_gal, fuel_added_gal, fuel_from_full_end_gal, fuel_price_per_gal, distance_nm, start_lat, start_lng, end_lat, end_lng, notes, trip_passengers(crew_id), trip_sites(site_id)',
+        'id, updated_at, trip_date, departure_time, return_time, engine_hours_start, engine_hours_end, fuel_from_full_start_gal, fuel_added_gal, fuel_from_full_end_gal, fuel_price_per_gal, distance_nm, start_lat, start_lng, end_lat, end_lng, notes, trip_passengers(crew_id), trip_sites(site_id)',
       )
       .eq('id', id)
       .maybeSingle(),
@@ -29,7 +29,12 @@ export default async function EditTripPage({
 
   const values: TripFormValues = Object.fromEntries(
     Object.entries(trip)
-      .filter(([key]) => key !== 'trip_passengers' && key !== 'trip_sites')
+      .filter(
+        ([key]) =>
+          key !== 'trip_passengers' &&
+          key !== 'trip_sites' &&
+          key !== 'updated_at',
+      )
       .map(([key, value]) => [key, value === null ? '' : String(value)]),
   )
 
@@ -42,6 +47,7 @@ export default async function EditTripPage({
         siteOptions={siteOptions}
         selectedCrewIds={trip.trip_passengers.map((row) => row.crew_id)}
         selectedSiteIds={trip.trip_sites.map((row) => row.site_id)}
+        savedAt={trip.updated_at}
         draftKey={`trip-${id}`}
       />
     </div>

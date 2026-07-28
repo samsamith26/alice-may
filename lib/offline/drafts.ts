@@ -47,6 +47,31 @@ export function hasExhaustedRetries(draft: TripDraft): boolean {
   return draft.attempts >= MAX_ATTEMPTS
 }
 
+/**
+ * Whether a draft has been overtaken by the copy on the server.
+ *
+ * A draft is a scratchpad kept in case the app dies mid-entry, and it only
+ * deserves to win while it holds something the server has not got. Once the
+ * trip has been saved since the draft was written, the draft is a photograph of
+ * an older version — and letting it seed the form again put people back aboard
+ * a trip they had been taken off, or left off people who had been added.
+ *
+ * A trip with no save behind it, and any unparseable timestamp, both leave the
+ * draft standing: this decides which of two saved things is newer, and must
+ * never be the reason unsent work disappears.
+ */
+export function isDraftStale(
+  draft: TripDraft,
+  serverSavedAt: string | null | undefined,
+): boolean {
+  if (!serverSavedAt) return false
+
+  const savedOnServer = Date.parse(serverSavedAt)
+  if (!Number.isFinite(savedOnServer)) return false
+
+  return draft.savedAt <= savedOnServer
+}
+
 /* ------------------------------------------------------------- storage -- */
 
 function store() {

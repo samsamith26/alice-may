@@ -10,6 +10,12 @@ import { uniqueUuids } from '@/lib/validation/ids'
 
 export type TripFormState =
   | { status: 'idle' }
+  /**
+   * Reported rather than redirected away from, so the form knows the trip is
+   * written and can throw away the draft it has been autosaving. Left behind,
+   * that draft outranks the saved trip the next time the form opens.
+   */
+  | { status: 'saved'; tripId: string }
   | {
       status: 'error'
       /**
@@ -190,7 +196,7 @@ export async function saveTrip(
     }
   }
 
-  redirect(`/trips/${result.tripId}`)
+  return { status: 'saved', tripId: result.tripId }
 }
 
 /**
