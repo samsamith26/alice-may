@@ -33,7 +33,7 @@ export default async function DashboardPage() {
     supabase
       .from('maintenance_schedule')
       .select(
-        'id, service_type, category, interval_hours, interval_months, annual_due_month, annual_due_day, due_at_hours_override, due_on_date_override, override_anchor_date, active',
+        'id, service_type, category, interval_hours, interval_count, interval_unit, active',
       )
       .eq('boat_id', membership.boatId),
     supabase
@@ -57,6 +57,13 @@ export default async function DashboardPage() {
     (schedules ?? []).map((row) => ({
       ...row,
       category: row.category === 'bill' ? ('bill' as const) : ('mechanical' as const),
+      interval_unit:
+        row.interval_unit === 'day' ||
+        row.interval_unit === 'week' ||
+        row.interval_unit === 'month' ||
+        row.interval_unit === 'year'
+          ? row.interval_unit
+          : null,
     })),
     serviceLog ?? [],
     currentHours,

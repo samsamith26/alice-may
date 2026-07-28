@@ -21,6 +21,7 @@
 --   20260728002241  fuel_readings_as_used_from_full
 --   20260728005928  schedule_categories_and_due_overrides
 --   20260728005939  seed_recurring_bills
+--   20260728013925  intervals_with_units_drop_overrides
 
 -- ============================================================ core_access ==
 
@@ -691,3 +692,57 @@ where not exists (
   where existing.boat_id = boats.id
     and existing.service_type = bill.service_type
 );
+
+-- ====================================== intervals_with_units_drop_overrides ==
+
+-- Scheduling is now one idea: last done plus an interval, computed fresh every
+-- time. Two things go away with that.
+--
+-- The manual override of a due point, along with its anchor. A due date is
+-- never set by hand any more; changing the interval is the only way scheduling
+-- moves.
+--
+-- The fixed annual date. Bills fall due a year after they were last paid, on
+-- the same footing as every other time-based item, so they no longer need a
+-- rule of their own.
+--
+-- Time intervals gain a unit, so a schedule can read "every 3 months", "every
+-- 10 days" or "every 3 years" rather than being forced into whole months.
+
+alter table public.maintenance_schedule
+  add column interval_count integer check (interval_count > 0),
+  add column interval_unit text
+    check (interval_unit in ('day', 'week', 'month', 'year'));
+
+update public.maintenance_schedule
+set interval_count = interval_months,
+    interval_unit = 'month'
+where interval_months is not null;
+
+-- The three bills recurred annually on a fixed date; a one-year interval is the
+-- same cadence expressed the new way.
+update public.maintenance_schedule
+set interval_count = 1,
+    interval_unit = 'year'
+where category = 'bill';
+
+alter table public.maintenance_schedule
+  drop constraint maintenance_schedule_has_rule,
+  drop constraint maintenance_schedule_annual_pair;
+
+alter table public.maintenance_schedule
+  drop column interval_months,
+  drop column annual_due_month,
+  drop column annual_due_day,
+  drop column due_at_hours_override,
+  drop column due_on_date_override,
+  drop column override_anchor_date;
+
+alter table public.maintenance_schedule
+  add constraint maintenance_schedule_has_interval check (
+    interval_hours is not null
+    or (interval_count is not null and interval_unit is not null)
+  ),
+  add constraint maintenance_schedule_interval_pair check (
+    (interval_count is null) = (interval_unit is null)
+  );

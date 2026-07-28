@@ -1,12 +1,18 @@
 import { requireMembership } from '@/lib/auth/membership'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentEngineHours } from '@/lib/db/queries'
-import { computeDueStatus, type ServiceCategory } from '@/lib/maintenance/due'
+import {
+  computeDueStatus,
+  type IntervalUnit,
+  type ServiceCategory,
+} from '@/lib/maintenance/due'
 import { DueBanner } from '@/components/maintenance/DueBanner'
 import { ServiceForm } from '@/components/maintenance/ServiceForm'
 import { ServiceEntry } from '@/components/maintenance/ServiceEntry'
-import { ScheduleCard } from '@/components/maintenance/ScheduleCard'
-import { ScheduleEditor } from '@/components/maintenance/ScheduleEditor'
+import {
+  ScheduleCard,
+  type ScheduleIntervals,
+} from '@/components/maintenance/ScheduleCard'
 import {
   Annotation,
   Card,
@@ -15,9 +21,15 @@ import {
 } from '@/components/ui/primitives'
 import { formatHours, formatMoney } from '@/lib/format/units'
 
-/** The column is a checked text column, so it arrives untyped. */
+/** Both columns are checked text columns, so they arrive untyped. */
 function asCategory(value: string): ServiceCategory {
   return value === 'bill' ? 'bill' : 'mechanical'
+}
+
+function asUnit(value: string | null): IntervalUnit | null {
+  return value === 'day' || value === 'week' || value === 'month' || value === 'year'
+    ? value
+    : null
 }
 
 export default async function MaintenancePage() {
@@ -28,7 +40,7 @@ export default async function MaintenancePage() {
     supabase
       .from('maintenance_schedule')
       .select(
-        'id, service_type, category, interval_hours, interval_months, annual_due_month, annual_due_day, due_at_hours_override, due_on_date_override, override_anchor_date, active',
+        'id, service_type, category, interval_hours, interval_count, interval_unit, active',
       )
       .eq('boat_id', membership.boatId)
       .order('service_type'),
@@ -45,11 +57,43 @@ export default async function MaintenancePage() {
   const rows = (schedules ?? []).map((row) => ({
     ...row,
     category: asCategory(row.category),
+    interval_unit: asUnit(row.interval_unit),
   }))
 
-  const items = computeDueStatus(rows, log ?? [], currentHours, new Date())
-  const mechanical = items.filter((item) => item.category === 'mechanical')
-  const bills = items.filter((item) => item.category === 'bill')
+  // Every item gets a card, tracked or not — the interval editor lives on the
+  // card now, so an untracked item would otherwise be unreachable and could
+  // never be switched back on.
+  const items = computeDueStatus(
+    rows.map((row) => ({ ...row, active: true })),
+    log ?? [],
+    currentHours,
+    new Date(),
+  )
+
+  const intervals = new Map<string, ScheduleIntervals>(
+    rows.map((row) => [
+      row.id,
+      {
+        interval_hours: row.interval_hours,
+        interval_count: row.interval_count,
+        interval_unit: row.interval_unit,
+        active: row.active,
+      },
+    ]),
+  )
+
+  const cards = items.flatMap((item) => {
+    const row = item.scheduleId === null ? undefined : intervals.get(item.scheduleId)
+    return row ? [{ item, intervals: row }] : []
+  })
+
+  const mechanical = cards.filter((card) => card.item.category === 'mechanical')
+  const bills = cards.filter((card) => card.item.category === 'bill')
+
+  // Untracked items still show, but must not raise a warning.
+  const tracked = cards
+    .filter((card) => card.intervals.active)
+    .map((card) => card.item)
 
   const serviceTypes = rows.map((row) => row.service_type)
   const billTypes = rows
@@ -66,15 +110,15 @@ export default async function MaintenancePage() {
         </Annotation>
       </div>
 
-      <DueBanner items={items} />
+      <DueBanner items={tracked} />
 
       {mechanical.length > 0 ? (
         <div>
           <Annotation>Maintenance</Annotation>
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {mechanical.map((item) => (
-              <li key={item.serviceType}>
-                <ScheduleCard item={item} canEdit={isCrew} />
+            {mechanical.map((card) => (
+              <li key={card.item.serviceType}>
+                <ScheduleCard {...card} canEdit={isCrew} />
               </li>
             ))}
           </ul>
@@ -85,9 +129,9 @@ export default async function MaintenancePage() {
         <div>
           <Annotation>Recurring bills</Annotation>
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {bills.map((item) => (
-              <li key={item.serviceType}>
-                <ScheduleCard item={item} canEdit={isCrew} />
+            {bills.map((card) => (
+              <li key={card.item.serviceType}>
+                <ScheduleCard {...card} canEdit={isCrew} />
               </li>
             ))}
           </ul>
@@ -104,9 +148,6 @@ export default async function MaintenancePage() {
               currentHours={currentHours}
             />
           </Card>
-          <ScheduleEditor
-            rows={rows.filter((row) => row.category === 'mechanical')}
-          />
         </>
       ) : null}
 

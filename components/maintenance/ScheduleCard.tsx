@@ -1,9 +1,30 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { saveDueOverride } from '@/app/(app)/maintenance/actions'
-import { Button, Card, Field, NumberInput, Pill, TextInput } from '@/components/ui/primitives'
-import type { DueItem } from '@/lib/maintenance/due'
+import { saveScheduleIntervals } from '@/app/(app)/maintenance/actions'
+import {
+  Button,
+  Card,
+  Field,
+  NumberInput,
+  Pill,
+  Select,
+} from '@/components/ui/primitives'
+import type { DueItem, IntervalUnit } from '@/lib/maintenance/due'
+
+export type ScheduleIntervals = {
+  interval_hours: number | null
+  interval_count: number | null
+  interval_unit: IntervalUnit | null
+  active: boolean
+}
+
+const UNIT_LABELS: Record<IntervalUnit, [string, string]> = {
+  day: ['day', 'days'],
+  week: ['week', 'weeks'],
+  month: ['month', 'months'],
+  year: ['year', 'years'],
+}
 
 function shortDate(iso: string) {
   return new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', {
@@ -19,35 +40,63 @@ function toNullableNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+/** "every 100 h · 3 months", or nothing if the item has no intervals at all. */
+function cadence(intervals: ScheduleIntervals): string {
+  const parts: string[] = []
+  if (intervals.interval_hours !== null) {
+    parts.push(`${intervals.interval_hours} h`)
+  }
+  if (intervals.interval_count !== null && intervals.interval_unit !== null) {
+    const [one, many] = UNIT_LABELS[intervals.interval_unit]
+    parts.push(
+      `${intervals.interval_count} ${intervals.interval_count === 1 ? one : many}`,
+    )
+  }
+  return parts.join(' · ')
+}
+
 /**
- * One schedule item, with an optional manual adjustment of when it falls due.
+ * One schedule item, with its interval editable in place.
  *
- * The adjustment is a correction or a one-off exception, not a change of
- * interval — that lives in the interval editor further down the page. It lapses
- * on its own once the item is next logged, which the panel says out loud so
- * nobody expects a permanent change.
+ * The interval is the only thing that can be changed: due points are always
+ * last done plus the interval, so there is nothing else to adjust and nothing
+ * that can disagree with the log.
  */
 export function ScheduleCard({
   item,
+  intervals,
   canEdit,
 }: {
   item: DueItem
+  intervals: ScheduleIntervals
   canEdit: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const [hours, setHours] = useState(item.dueAtHours?.toString() ?? '')
-  const [date, setDate] = useState(item.dueOnDate ?? '')
+  const [hours, setHours] = useState(intervals.interval_hours?.toString() ?? '')
+  const [count, setCount] = useState(intervals.interval_count?.toString() ?? '')
+  const [unit, setUnit] = useState<IntervalUnit>(intervals.interval_unit ?? 'month')
+  const [active, setActive] = useState(intervals.active)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
-  const isBill = item.category === 'bill'
+  // Hour intervals only mean something for the engine. A bill has no hours to
+  // run, so it gets the time interval alone.
+  const showHours = item.category === 'mechanical'
 
-  function save(nextHours: number | null, nextDate: string | null) {
+  function save() {
+    setError(null)
     const scheduleId = item.scheduleId
     if (scheduleId === null) return
-    setError(null)
+
+    const nextCount = toNullableNumber(count)
     startTransition(async () => {
-      const result = await saveDueOverride(scheduleId, nextHours, nextDate)
+      const result = await saveScheduleIntervals(
+        scheduleId,
+        showHours ? toNullableNumber(hours) : null,
+        nextCount,
+        nextCount === null ? null : unit,
+        active,
+      )
       if (!result.ok) {
         setError(result.message ?? 'Could not save.')
         return
@@ -56,11 +105,7 @@ export function ScheduleCard({
     })
   }
 
-  function reset() {
-    setHours('')
-    setDate('')
-    save(null, null)
-  }
+  const summary = cadence(intervals)
 
   return (
     <Card className="flex flex-col gap-2">
@@ -70,29 +115,27 @@ export function ScheduleCard({
       </div>
 
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-        <dt className="opacity-60">{isBill ? 'Last paid' : 'Last done'}</dt>
+        <dt className="opacity-60">{showHours ? 'Last done' : 'Last paid'}</dt>
         <dd className="readout">
           {item.lastServiceDate ? shortDate(item.lastServiceDate) : 'Never'}
         </dd>
-        {isBill ? null : (
+        {showHours ? (
           <>
             <dt className="opacity-60">Due at</dt>
             <dd className="readout">
               {item.dueAtHours !== null ? `${item.dueAtHours} h` : '—'}
             </dd>
           </>
-        )}
+        ) : null}
         <dt className="opacity-60">Due by</dt>
-        <dd className="readout">
-          {item.dueOnDate ? shortDate(item.dueOnDate) : '—'}
-        </dd>
+        <dd className="readout">{item.dueOnDate ? shortDate(item.dueOnDate) : '—'}</dd>
+        <dt className="opacity-60">Every</dt>
+        <dd className="readout">{summary === '' ? '—' : summary}</dd>
       </dl>
 
-      {item.overridden ? (
-        <p className="text-xs text-magenta-600 dark:text-magenta-400">
-          Adjusted by hand — back to normal once this is logged again.
-        </p>
-      ) : null}
+      {intervals.active ? null : (
+        <p className="text-xs opacity-60">Not tracked.</p>
+      )}
 
       {canEdit && item.scheduleId !== null ? (
         <>
@@ -102,60 +145,81 @@ export function ScheduleCard({
             aria-expanded={open}
             className="self-start text-xs font-semibold text-magenta-600 underline underline-offset-2 dark:text-magenta-400"
           >
-            {open ? 'Close' : 'Adjust due'}
+            {open ? 'Close' : 'Change interval'}
           </button>
 
           {open ? (
             <div className="flex flex-col gap-3 border-t border-chart-300/60 pt-3 dark:border-hull-700/60">
               <p className="text-xs text-hull-700/75 dark:text-chart-200/65">
-                Sets when this one falls due, leaving the interval alone. Clear a
-                box to hand that measure back to the schedule.
+                Due dates are worked out from the last one logged, so changing
+                this moves everything from here on. Leave a box empty to ignore
+                that measure.
               </p>
 
-              <div className={isBill ? undefined : 'grid gap-3 sm:grid-cols-2'}>
-                {isBill ? null : (
-                  <Field label="Due at (hours)">
-                    <NumberInput
-                      step="1"
-                      value={hours}
-                      onChange={(event) => setHours(event.target.value)}
-                      placeholder="—"
-                    />
-                  </Field>
-                )}
-                <Field label="Due by">
-                  <TextInput
-                    type="date"
-                    value={date}
-                    onChange={(event) => setDate(event.target.value)}
+              {showHours ? (
+                <Field label="Every (hours)">
+                  <NumberInput
+                    step="1"
+                    value={hours}
+                    onChange={(event) => setHours(event.target.value)}
+                    placeholder="—"
                   />
                 </Field>
+              ) : null}
+
+              <div className="grid grid-cols-[1fr_1.3fr] gap-2">
+                <Field label="Every">
+                  <NumberInput
+                    step="1"
+                    min="1"
+                    value={count}
+                    onChange={(event) => setCount(event.target.value)}
+                    placeholder="—"
+                  />
+                </Field>
+                <Field label="Unit">
+                  <Select
+                    value={unit}
+                    onChange={(event) => setUnit(event.target.value as IntervalUnit)}
+                  >
+                    <option value="day">days</option>
+                    <option value="week">weeks</option>
+                    <option value="month">months</option>
+                    <option value="year">years</option>
+                  </Select>
+                </Field>
               </div>
+
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(event) => setActive(event.target.checked)}
+                  className="accent-magenta-500"
+                />
+                Tracked
+              </label>
+              <p className="text-xs text-hull-700/70 dark:text-chart-200/60">
+                Untick to stop warning about this without deleting its history.
+              </p>
 
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="secondary"
                   disabled={pending}
-                  onClick={() =>
-                    save(
-                      isBill ? null : toNullableNumber(hours),
-                      date.trim() === '' ? null : date,
-                    )
-                  }
+                  onClick={save}
                 >
                   {pending ? 'Saving…' : 'Save'}
                 </Button>
-                {item.overridden ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={pending}
-                    onClick={reset}
-                  >
-                    Back to schedule
-                  </Button>
-                ) : null}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </Button>
               </div>
 
               {error ? (

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { computeDueStatus } from './due'
+import { addInterval, computeDueStatus } from './due'
 
 const today = new Date('2026-07-26T12:00:00Z')
 
 const oilSchedule = {
   service_type: 'Engine oil & filter',
   interval_hours: 100,
-  interval_months: 12,
+  interval_count: 12,
+  interval_unit: 'month' as const,
   active: true,
 }
 
@@ -74,7 +75,8 @@ describe('computeDueStatus', () => {
         {
           service_type: 'Water pump impeller',
           interval_hours: null,
-          interval_months: 12,
+          interval_count: 12,
+          interval_unit: 'month' as const,
           active: true,
         },
       ],
@@ -94,7 +96,7 @@ describe('computeDueStatus', () => {
 
   it('uses the most recent service when several are logged out of order', () => {
     const [item] = computeDueStatus(
-      [{ ...oilSchedule, interval_months: null }],
+      [{ ...oilSchedule, interval_count: null, interval_unit: null }],
       [
         {
           service_type: 'Engine oil & filter',
@@ -121,7 +123,8 @@ describe('computeDueStatus', () => {
           {
             service_type: 'Spark plugs',
             interval_hours: 400,
-            interval_months: null,
+            interval_count: null,
+            interval_unit: null,
             active: false,
           },
         ],
@@ -155,13 +158,15 @@ describe('computeDueStatus', () => {
         {
           service_type: 'Fine',
           interval_hours: 100,
-          interval_months: null,
+          interval_count: null,
+          interval_unit: null,
           active: true,
         },
         {
           service_type: 'Late',
           interval_hours: 100,
-          interval_months: null,
+          interval_count: null,
+          interval_unit: null,
           active: true,
         },
       ],
@@ -178,7 +183,7 @@ describe('computeDueStatus', () => {
 
   it('cannot judge hours when the engine reading is unknown', () => {
     const [item] = computeDueStatus(
-      [{ ...oilSchedule, interval_months: null }],
+      [{ ...oilSchedule, interval_count: null, interval_unit: null }],
       [
         {
           service_type: 'Engine oil & filter',
@@ -199,318 +204,97 @@ describe('computeDueStatus', () => {
   })
 })
 
-/* ------------------------------------------------- fixed annual billing -- */
+/* ------------------------------------------------------- interval units -- */
 
-const rent = {
-  service_type: 'Rent',
-  category: 'bill' as const,
-  interval_hours: null,
-  interval_months: null,
-  annual_due_month: 7,
-  annual_due_day: 1,
-  active: true,
-}
-
-/** Rent is paid yearly on 1 July; today is 26 July 2026. */
-describe('computeDueStatus, fixed annual items', () => {
-  it('is due this year once the date has passed unpaid', () => {
-    const [item] = computeDueStatus([rent], [], null, today)
-    expect(item.dueOnDate).toBe('2026-07-01')
-    expect(item.status).toBe('overdue')
+describe('addInterval', () => {
+  it('adds days', () => {
+    expect(addInterval('2026-07-26', 10, 'day')).toBe('2026-08-05')
   })
 
-  it('rolls to next year once the current cycle is paid', () => {
-    const [item] = computeDueStatus(
-      [rent],
-      [
-        {
-          service_type: 'Rent',
-          service_date: '2026-07-03',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      today,
-    )
-    expect(item.dueOnDate).toBe('2027-07-01')
+  it('adds weeks', () => {
+    expect(addInterval('2026-07-26', 2, 'week')).toBe('2026-08-09')
+  })
+
+  it('adds months', () => {
+    expect(addInterval('2026-07-26', 3, 'month')).toBe('2026-10-26')
+  })
+
+  it('adds years', () => {
+    expect(addInterval('2026-07-26', 3, 'year')).toBe('2029-07-26')
+  })
+
+  it('clamps rather than overflowing a short month', () => {
+    // Plain month arithmetic turns this into 3 March, moving a service into a
+    // month it does not belong in.
+    expect(addInterval('2026-01-31', 1, 'month')).toBe('2026-02-28')
+    expect(addInterval('2028-01-31', 1, 'month')).toBe('2028-02-29')
+  })
+
+  it('crosses a year boundary', () => {
+    expect(addInterval('2026-11-15', 4, 'month')).toBe('2027-03-15')
+  })
+})
+
+describe('computeDueStatus, interval units', () => {
+  function scheduleEvery(count: number, unit: 'day' | 'week' | 'month' | 'year') {
+    return {
+      service_type: 'Rent',
+      category: 'bill' as const,
+      interval_hours: null,
+      interval_count: count,
+      interval_unit: unit,
+      active: true,
+    }
+  }
+
+  const paidInJune = [
+    { service_type: 'Rent', service_date: '2026-06-18', engine_hours_at_service: null },
+  ]
+
+  it('measures a yearly bill from when it was last paid', () => {
+    const [item] = computeDueStatus([scheduleEvery(1, 'year')], paidInJune, null, today)
+    expect(item.dueOnDate).toBe('2027-06-18')
     expect(item.status).toBe('ok')
   })
 
-  it("does not let last year's payment satisfy this year", () => {
-    // Paid in 2025, never in 2026. The 2026 cycle has arrived and is unpaid.
-    const [item] = computeDueStatus(
-      [rent],
-      [
-        {
-          service_type: 'Rent',
-          service_date: '2025-07-01',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      today,
-    )
-    expect(item.dueOnDate).toBe('2026-07-01')
+  it('measures a weekly item in weeks', () => {
+    const [item] = computeDueStatus([scheduleEvery(2, 'week')], paidInJune, null, today)
+    expect(item.dueOnDate).toBe('2026-07-02')
     expect(item.status).toBe('overdue')
   })
 
-  it('looks ahead to this year while the date is still coming', () => {
-    // 15 June: the cycle in force started 1 July 2025 and was paid, so what is
-    // outstanding is 1 July 2026 — sixteen days off, which is "soon".
-    const [item] = computeDueStatus(
-      [rent],
-      [
-        {
-          service_type: 'Rent',
-          service_date: '2025-07-02',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      new Date('2026-06-15T12:00:00Z'),
-    )
-    expect(item.dueOnDate).toBe('2026-07-01')
+  it('measures a daily item in days', () => {
+    const [item] = computeDueStatus([scheduleEvery(45, 'day')], paidInJune, null, today)
+    expect(item.dueOnDate).toBe('2026-08-02')
     expect(item.status).toBe('soon')
   })
 
-  it('stays ok early in the cycle', () => {
-    const [item] = computeDueStatus(
-      [rent],
-      [
-        {
-          service_type: 'Rent',
-          service_date: '2025-07-02',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      new Date('2026-01-15T12:00:00Z'),
-    )
-    expect(item.dueOnDate).toBe('2026-07-01')
-    expect(item.status).toBe('ok')
-  })
-
-  it('credits a payment made shortly before the date to that cycle', () => {
-    // Rent for the 1 July cycle, paid on 18 June. Crediting it to the July 2025
-    // cycle instead would leave the bill reading overdue two weeks after it was
-    // actually settled.
-    const [item] = computeDueStatus(
-      [rent],
-      [
-        {
-          service_type: 'Rent',
-          service_date: '2026-06-18',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      today,
-    )
-    expect(item.dueOnDate).toBe('2027-07-01')
-    expect(item.status).toBe('ok')
-  })
-
-  it('counts a payment exactly at the edge of the early window', () => {
-    // 2 May is 60 days before 1 July.
-    const [item] = computeDueStatus(
-      [rent],
-      [
-        {
-          service_type: 'Rent',
-          service_date: '2026-05-02',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      today,
-    )
-    expect(item.dueOnDate).toBe('2027-07-01')
-  })
-
-  it('treats a payment months ahead as settling the previous cycle', () => {
-    // January is too far from the following July to be early payment for it, so
-    // this settles July 2025 and July 2026 is still outstanding.
-    const [item] = computeDueStatus(
-      [rent],
-      [
-        {
-          service_type: 'Rent',
-          service_date: '2026-01-15',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      today,
-    )
-    expect(item.dueOnDate).toBe('2026-07-01')
-    expect(item.status).toBe('overdue')
-  })
-
-  it('credits an early payment made before the date has come round', () => {
-    // 27 July, for a bill due 1 August. The August cycle has not arrived, so
-    // the item was not even due yet — and is now settled through next year.
-    const propertyTax = {
-      ...rent,
-      service_type: 'Property tax',
-      annual_due_month: 8,
-      annual_due_day: 1,
-    }
-    const [item] = computeDueStatus(
-      [propertyTax],
-      [
-        {
-          service_type: 'Property tax',
-          service_date: '2026-07-27',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      today,
-    )
-    expect(item.dueOnDate).toBe('2027-08-01')
-    expect(item.status).toBe('ok')
-  })
-
-  it('never reports an hour figure, whatever the engine is reading', () => {
-    const [item] = computeDueStatus([rent], [], 4000, today)
+  it('never reports an hour figure for an item with no hour interval', () => {
+    const [item] = computeDueStatus([scheduleEvery(1, 'year')], paidInJune, 4000, today)
     expect(item.dueAtHours).toBeNull()
     expect(item.hoursRemaining).toBeNull()
   })
 
-  it('handles a 1 January date without slipping a year', () => {
-    const parking = {
-      ...rent,
-      service_type: 'Parking pass',
-      annual_due_month: 1,
-      annual_due_day: 1,
-    }
-    const [unpaid] = computeDueStatus([parking], [], null, today)
-    expect(unpaid.dueOnDate).toBe('2026-01-01')
-
-    const [paid] = computeDueStatus(
-      [parking],
-      [
-        {
-          service_type: 'Parking pass',
-          service_date: '2026-01-04',
-          engine_hours_at_service: null,
-        },
-      ],
-      null,
-      today,
-    )
-    expect(paid.dueOnDate).toBe('2027-01-01')
-    expect(paid.status).toBe('ok')
-  })
-
-  it('clamps a 29 February date in a common year', () => {
-    const leapling = {
-      ...rent,
-      service_type: 'Leap day levy',
-      annual_due_month: 2,
-      annual_due_day: 29,
-    }
-    const [item] = computeDueStatus([leapling], [], null, new Date('2027-06-01T12:00:00Z'))
-    expect(item.dueOnDate).toBe('2027-02-28')
-  })
-})
-
-/* -------------------------------------------------------- due overrides -- */
-
-describe('computeDueStatus, manual overrides', () => {
-  const lastOilChange = {
-    service_type: 'Engine oil & filter',
-    service_date: '2026-06-01',
-    engine_hours_at_service: 400,
-  }
-
-  it('replaces the computed hour figure', () => {
-    const [item] = computeDueStatus(
-      [{ ...oilSchedule, due_at_hours_override: 450, override_anchor_date: '2026-06-01' }],
-      [lastOilChange],
-      440,
-      today,
-    )
-    expect(item.dueAtHours).toBe(450)
-    expect(item.hoursRemaining).toBe(10)
-    expect(item.overridden).toBe(true)
-  })
-
-  it('replaces the computed date', () => {
-    const [item] = computeDueStatus(
-      [
-        {
-          ...oilSchedule,
-          due_on_date_override: '2026-07-01',
-          override_anchor_date: '2026-06-01',
-        },
-      ],
-      [lastOilChange],
-      410,
-      today,
-    )
-    expect(item.dueOnDate).toBe('2026-07-01')
+  it('is overdue while nothing has ever been logged against it', () => {
+    const [item] = computeDueStatus([scheduleEvery(1, 'year')], [], null, today)
+    expect(item.dueOnDate).toBeNull()
     expect(item.status).toBe('overdue')
   })
 
-  it('leaves the other measure on its computed value', () => {
-    // Overriding the date says nothing about hours.
+  it('ignores a time interval with no unit', () => {
     const [item] = computeDueStatus(
+      [{ ...oilSchedule, interval_unit: null }],
       [
-        {
-          ...oilSchedule,
-          due_on_date_override: '2026-12-25',
-          override_anchor_date: '2026-06-01',
-        },
-      ],
-      [lastOilChange],
-      410,
-      today,
-    )
-    expect(item.dueAtHours).toBe(500)
-    expect(item.dueOnDate).toBe('2026-12-25')
-  })
-
-  it('lapses once a newer service is logged', () => {
-    // The exception was granted against the June entry. July supersedes it, and
-    // the interval maths takes back over rather than the item staying pinned.
-    const [item] = computeDueStatus(
-      [{ ...oilSchedule, due_at_hours_override: 450, override_anchor_date: '2026-06-01' }],
-      [
-        lastOilChange,
         {
           service_type: 'Engine oil & filter',
-          service_date: '2026-07-20',
-          engine_hours_at_service: 460,
+          service_date: '2026-06-01',
+          engine_hours_at_service: 400,
         },
       ],
-      470,
+      420,
       today,
     )
-    expect(item.overridden).toBe(false)
-    expect(item.dueAtHours).toBe(560)
-  })
-
-  it('applies to an item that has never been logged', () => {
-    const [item] = computeDueStatus(
-      [{ ...oilSchedule, due_on_date_override: '2026-12-01', override_anchor_date: null }],
-      [],
-      412,
-      today,
-    )
-    expect(item.overridden).toBe(true)
-    expect(item.status).toBe('ok')
-  })
-
-  it('overrides a fixed annual date too', () => {
-    const [item] = computeDueStatus(
-      // Without the override this would sit overdue on 1 July.
-      [{ ...rent, due_on_date_override: '2026-08-15', override_anchor_date: null }],
-      [],
-      null,
-      today,
-    )
-    expect(item.dueOnDate).toBe('2026-08-15')
-    expect(item.status).toBe('soon')
+    expect(item.dueOnDate).toBeNull()
+    expect(item.dueAtHours).toBe(500)
   })
 })
