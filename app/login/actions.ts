@@ -28,7 +28,11 @@ export async function requestMagicLink(
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: `${origin}/auth/callback` },
+    // The email template builds its link from this, so it points at the page
+    // with the confirm button rather than at anything that signs you in just by
+    // being fetched. Taken from the request so a link asked for on localhost
+    // comes back to localhost.
+    options: { emailRedirectTo: `${origin}/auth/confirm` },
   })
 
   if (error) {

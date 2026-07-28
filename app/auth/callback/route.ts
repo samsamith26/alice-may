@@ -1,10 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 
 /**
- * Magic links land here. @supabase/ssr defaults to the PKCE flow, so the link
- * carries a `code` to exchange for a session — not a `token_hash`, which would
- * need a customised email template this project's plan cannot provide.
+ * Where sign-in links used to land, kept only for links already sitting in
+ * somebody's inbox. New ones go to /auth/confirm, which waits for a button
+ * press rather than signing you in the instant the URL is fetched.
+ *
+ * This hands over rather than exchanging the code itself: anything that fetches
+ * a link before its recipient opens it — a mail client building a preview, a
+ * company scanner checking where it goes — would otherwise spend the code here
+ * and leave the person who asked for it staring at an expired link.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -15,15 +19,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`)
   }
 
-  const supabase = await createClient()
-  const { error } = await supabase.auth.exchangeCodeForSession(code)
-
-  if (error) {
-    return NextResponse.redirect(`${origin}/login?error=link_expired`)
-  }
-
   // Only ever redirect within this app; an attacker-supplied `next` must not
   // be able to bounce a freshly authenticated user off-site.
   const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/'
-  return NextResponse.redirect(`${origin}${safeNext}`)
+
+  const handover = new URL('/auth/confirm', origin)
+  handover.searchParams.set('code', code)
+  handover.searchParams.set('next', safeNext)
+  return NextResponse.redirect(handover)
 }

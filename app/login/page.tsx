@@ -8,6 +8,7 @@ import { Annotation, Button, Field, TextInput } from '@/components/ui/primitives
 
 const LINK_ERRORS: Record<string, string> = {
   missing_code: 'That link was incomplete. Request a new one below.',
+  missing_token: 'That link was incomplete. Request a new one below.',
   link_expired: 'That link has expired or was already used. Request a new one.',
 }
 

@@ -53,10 +53,19 @@ Verified against current docs — training data is stale on several of these:
   `middleware()`. Node runtime only; the edge runtime is not supported in `proxy`.
 - **Use `supabase.auth.getClaims()` in the proxy**, not `getUser()`. Run nothing
   between `createServerClient` and that call — it causes random logouts.
-- **Magic links use the PKCE flow** (`?code=` → `/auth/callback` →
-  `exchangeCodeForSession`). The `token_hash` + `verifyOtp` pattern needs a customised
-  email template, and this project is on the Supabase free plan where auth email
-  templates cannot be customised.
+- **A sign-in link must never sign anyone in just by being fetched.** Mail clients
+  build previews and company scanners check links, both by loading them, and a
+  sign-in token works exactly once — so whatever loads it first spends it, and the
+  real recipient is told the link expired. Links land on `/auth/confirm`, which
+  reads the token, renders a button, and verifies nothing until that button is
+  pressed. Anything that verifies on page load brings the bug straight back.
+- **Auth email templates are editable on the free plan**, under Authentication →
+  Emails. An earlier note here claimed they were not, which is what pushed the
+  whole flow onto PKCE to avoid needing one. The magic link template points at
+  `/auth/confirm` with `{{ .TokenHash }}`, keeping Supabase's own verify endpoint
+  out of the path entirely so there is nothing spendable before the button.
+  `/auth/confirm` also accepts the `?code=` Supabase's default template produces,
+  so sign-in still works if that template is ever reset.
 - **New `public` tables are not auto-exposed to the Data API.** Every table needs an
   explicit `grant ... to authenticated` or queries fail with a permission error despite
   correct RLS policies.
