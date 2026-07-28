@@ -97,7 +97,7 @@ export default async function MaintenancePage() {
       {isCrew ? (
         <>
           <Card className="flex flex-col gap-4">
-            <Annotation>Log a service or payment</Annotation>
+            <Annotation>Log a service</Annotation>
             <ServiceForm
               serviceTypes={serviceTypes}
               billTypes={billTypes}
