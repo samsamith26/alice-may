@@ -126,7 +126,10 @@ export async function createCrewMember(name: string): Promise<CreateCrewResult> 
     return { ok: false, message: error?.message ?? 'Could not add them.' }
   }
 
-  revalidatePath('/crew')
+  // Deliberately no revalidatePath. This is called from the trip form, and
+  // revalidating pushes a fresh render of whatever page the user is currently
+  // filling in — mid-entry, from inside a transition. The roster page reads
+  // the table on every request anyway, so there is no cache to clear.
   return { ok: true, person: data }
 }
 

@@ -9,7 +9,17 @@ import { tripSchema } from '@/lib/validation/schemas'
 
 export type TripFormState =
   | { status: 'idle' }
-  | { status: 'error'; message?: string; fieldErrors?: Record<string, string[]> }
+  | {
+      status: 'error'
+      /**
+       * Set when the trip was written but a later step failed. The form puts it
+       * back in its hidden id field so a retry updates that trip rather than
+       * logging a second copy of the same outing.
+       */
+      tripId?: string
+      message?: string
+      fieldErrors?: Record<string, string[]>
+    }
 
 /**
  * Fetch conditions for a saved trip and attach them.
@@ -79,7 +89,60 @@ async function attachConditions(tripId: string): Promise<void> {
 
 type PersistResult =
   | { ok: true; tripId: string }
-  | { ok: false; message?: string; fieldErrors?: Record<string, string[]> }
+  | {
+      ok: false
+      /** Present when the trip itself was written but something after it was not. */
+      tripId?: string
+      message?: string
+      fieldErrors?: Record<string, string[]>
+    }
+
+/**
+ * Replace who was aboard, wholesale.
+ *
+ * Returns a message on failure rather than throwing, so a half-written trip
+ * reports what went wrong instead of looking like a clean save.
+ */
+async function replacePassengers(
+  tripId: string,
+  crewIds: string[],
+): Promise<string | null> {
+  const supabase = await createClient()
+
+  const { error: clearError } = await supabase
+    .from('trip_passengers')
+    .delete()
+    .eq('trip_id', tripId)
+  if (clearError) return clearError.message
+
+  if (crewIds.length === 0) return null
+
+  const { error } = await supabase
+    .from('trip_passengers')
+    .insert(crewIds.map((crewId) => ({ trip_id: tripId, crew_id: crewId })))
+  return error?.message ?? null
+}
+
+/** As above, for the sites a trip visited. */
+async function replaceSites(
+  tripId: string,
+  siteIds: string[],
+): Promise<string | null> {
+  const supabase = await createClient()
+
+  const { error: clearError } = await supabase
+    .from('trip_sites')
+    .delete()
+    .eq('trip_id', tripId)
+  if (clearError) return clearError.message
+
+  if (siteIds.length === 0) return null
+
+  const { error } = await supabase
+    .from('trip_sites')
+    .insert(siteIds.map((siteId) => ({ trip_id: tripId, site_id: siteId })))
+  return error?.message ?? null
+}
 
 /**
  * Writes a trip and returns an outcome.
@@ -121,18 +184,15 @@ async function persistTrip(formData: FormData): Promise<PersistResult> {
   const crewIds = formData.getAll('crew_ids').map(String).filter(Boolean)
   const siteIds = formData.getAll('site_ids').map(String).filter(Boolean)
 
-  await supabase.from('trip_passengers').delete().eq('trip_id', trip.id)
-  if (crewIds.length > 0) {
-    await supabase
-      .from('trip_passengers')
-      .insert(crewIds.map((crewId) => ({ trip_id: trip.id, crew_id: crewId })))
-  }
+  // Reported rather than ignored. These failing used to leave the trip saved,
+  // the redirect happening, and nobody aboard — with nothing anywhere saying
+  // so, which is a miserable thing to have to notice for yourself.
+  const linkError =
+    (await replacePassengers(trip.id, crewIds)) ??
+    (await replaceSites(trip.id, siteIds))
 
-  await supabase.from('trip_sites').delete().eq('trip_id', trip.id)
-  if (siteIds.length > 0) {
-    await supabase
-      .from('trip_sites')
-      .insert(siteIds.map((siteId) => ({ trip_id: trip.id, site_id: siteId })))
+  if (linkError) {
+    return { ok: false, tripId: trip.id, message: linkError }
   }
 
   await attachConditions(trip.id)
@@ -154,6 +214,7 @@ export async function saveTrip(
   if (!result.ok) {
     return {
       status: 'error',
+      tripId: result.tripId,
       message: result.message,
       fieldErrors: result.fieldErrors,
     }

@@ -181,6 +181,9 @@ export function TripForm({
 
   const initial = { ...values, ...(restored ?? {}) }
   const errors = state.status === 'error' ? (state.fieldErrors ?? {}) : {}
+  // A save that got as far as writing the trip before failing. Retrying has to
+  // update that row, not log the outing twice.
+  const savedTripId = state.status === 'error' ? state.tripId : undefined
 
   // A stored draft keeps repeated keys as one space-delimited string.
   const draftedCrewIds = initial.crew_ids?.split(' ').filter(Boolean)
@@ -246,7 +249,7 @@ export function TripForm({
       onChange={onChange}
       className="flex flex-col gap-4"
     >
-      <input type="hidden" name="id" defaultValue={initial.id ?? ''} />
+      <input type="hidden" name="id" value={savedTripId ?? initial.id ?? ''} readOnly />
 
       {restored ? (
         <Card>

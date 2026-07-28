@@ -47,6 +47,15 @@ export function CrewPicker({
   const [adding, startAdd] = useTransition()
   const dialogRef = useRef<HTMLDialogElement>(null)
 
+  /**
+   * The selection as of right now, rather than as of the render a handler was
+   * created in. Adding somebody new awaits a round trip to the server, so by
+   * the time it finishes, `selected` in that closure can be several selections
+   * out of date — and building the next list from it silently drops everyone
+   * ticked in the meantime.
+   */
+  const selectedRef = useRef(selected)
+
   // showModal() is what gives the sheet its backdrop, focus trap and escape
   // key. There is no declarative equivalent.
   useEffect(() => {
@@ -57,15 +66,23 @@ export function CrewPicker({
   }, [open])
 
   function commit(next: string[]) {
+    selectedRef.current = next
     setSelected(next)
     onSelectionChange(next)
   }
 
+  function select(id: string) {
+    const current = selectedRef.current
+    if (current.includes(id)) return
+    commit([...current, id])
+  }
+
   function toggle(id: string) {
+    const current = selectedRef.current
     commit(
-      selected.includes(id)
-        ? selected.filter((current) => current !== id)
-        : [...selected, id],
+      current.includes(id)
+        ? current.filter((other) => other !== id)
+        : [...current, id],
     )
   }
 
@@ -81,7 +98,7 @@ export function CrewPicker({
     if (existing) {
       setNewName('')
       setError(null)
-      if (!selected.includes(existing.id)) commit([...selected, existing.id])
+      select(existing.id)
       return
     }
 
@@ -95,7 +112,7 @@ export function CrewPicker({
       setRoster((current) => [...current, person].sort(byName))
       setNewName('')
       setError(null)
-      commit([...selected, person.id])
+      select(person.id)
     })
   }
 
