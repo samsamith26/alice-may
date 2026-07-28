@@ -56,3 +56,25 @@ The two security advisor warnings both concern that function being callable by
 `anon` and by `authenticated`. Both are accepted by design — a float plan that
 required a login would be useless to the neighbour or marina office it exists
 for. No advisor errors.
+
+## Replacing a trip's crew and sites
+
+Run 2026-07-28 as the owner (`set local role authenticated` plus their real
+`sub`), so RLS applied throughout, inside a transaction that was rolled back.
+
+`public.set_trip_links(trip, crew[], sites[])` replaces both lists in one
+transaction. Previously this was a DELETE request followed by an INSERT request:
+when the insert failed the delete had already committed, and a trip that had
+people aboard was left with none while the form reported only an error.
+
+| Step | Passed in | Aboard afterwards |
+| --- | --- | --- |
+| Initial save | Becca, Chris | Becca, Chris |
+| Re-save the identical list | Becca, Chris | Becca, Chris |
+| Overlapping list | Chris, Lilly | Chris, Lilly |
+| Same person listed twice | Chris, Chris | Chris |
+| Empty list | — | nobody |
+
+Rows two and four are the ones that used to fail: both collided with
+`trip_passengers_pkey` and returned 409, which aborted the save after the delete
+had already emptied the table.

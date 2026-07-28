@@ -23,6 +23,7 @@
 --   20260728005939  seed_recurring_bills
 --   20260728013925  intervals_with_units_drop_overrides
 --   20260728015309  bills_return_to_fixed_annual_dates
+--   20260728025231  set_trip_links_atomically
 
 -- ============================================================ core_access ==
 
@@ -802,3 +803,45 @@ alter table public.maintenance_schedule
     category <> 'bill'
     or (annual_due_month is not null and annual_due_day is not null)
   );
+
+-- ============================================== set_trip_links_atomically ==
+
+-- Replacing who was aboard used to be a DELETE request followed by an INSERT
+-- request. Two round trips, two transactions: when the insert failed, the
+-- delete had already committed, so a trip that had three people aboard was
+-- left with none and the failure looked like it had changed nothing.
+--
+-- One function, one statement, one transaction. If the insert cannot happen the
+-- delete is rolled back with it, and the trip keeps the crew it already had.
+--
+-- security invoker so the caller's RLS still decides what they may touch: this
+-- is a convenience for doing two writes together, not a way around the policies.
+create or replace function public.set_trip_links(
+  p_trip uuid,
+  p_crew uuid[],
+  p_sites uuid[]
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  delete from public.trip_passengers where trip_id = p_trip;
+  delete from public.trip_sites where trip_id = p_trip;
+
+  -- distinct, and on conflict do nothing: picking the same person twice is a
+  -- confused list, not a reason to lose the whole trip's crew.
+  insert into public.trip_passengers (trip_id, crew_id)
+  select distinct p_trip, crew_id
+  from unnest(coalesce(p_crew, '{}'::uuid[])) as crew_id
+  on conflict do nothing;
+
+  insert into public.trip_sites (trip_id, site_id)
+  select distinct p_trip, site_id
+  from unnest(coalesce(p_sites, '{}'::uuid[])) as site_id
+  on conflict do nothing;
+end
+$$;
+
+grant execute on function public.set_trip_links(uuid, uuid[], uuid[]) to authenticated;

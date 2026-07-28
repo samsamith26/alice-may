@@ -626,6 +626,10 @@ export type Database = {
     }
     Functions: {
       get_float_plan: { Args: { p_token: string }; Returns: Json }
+      set_trip_links: {
+        Args: { p_trip: string; p_crew: string[]; p_sites: string[] }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: 'crew' | 'viewer'

@@ -18,7 +18,7 @@ import {
   saveDraft,
   type DraftValues,
 } from '@/lib/offline/drafts'
-import { uuidsOnly } from '@/lib/validation/ids'
+import { uniqueUuids } from '@/lib/validation/ids'
 import { CrewPicker } from './CrewPicker'
 import { DistanceFields } from './DistanceFields'
 
@@ -201,7 +201,7 @@ export function TripForm({
   const savedTripId = state.status === 'error' ? state.tripId : undefined
 
   const initialCrewIds = restored?.crew_ids
-    ? uuidsOnly(restored.crew_ids)
+    ? uniqueUuids(restored.crew_ids)
     : selectedCrewIds
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {

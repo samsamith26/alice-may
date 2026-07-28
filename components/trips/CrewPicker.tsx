@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { createCrewMember } from '@/app/(app)/access/actions'
 import { Annotation, Button, CONTROL } from '@/components/ui/primitives'
+import { uniqueUuids } from '@/lib/validation/ids'
 
 export type CrewOption = { id: string; label: string }
 
@@ -40,7 +41,10 @@ export function CrewPicker({
   onSelectionChange: (next: string[]) => void
 }) {
   const [roster, setRoster] = useState(() => [...options].sort(byName))
-  const [selected, setSelected] = useState(defaultSelected)
+  // Seeded through the same filter the server applies. A restored draft is the
+  // one source of this list nothing else vets, and one repeat in it would put
+  // the same person on the trip twice.
+  const [selected, setSelected] = useState(() => uniqueUuids(defaultSelected))
   const [open, setOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -109,7 +113,11 @@ export function CrewPicker({
         return
       }
       const person = { id: result.person.id, label: result.person.name }
-      setRoster((current) => [...current, person].sort(byName))
+      setRoster((current) =>
+        current.some((known) => known.id === person.id)
+          ? current
+          : [...current, person].sort(byName),
+      )
       setNewName('')
       setError(null)
       select(person.id)

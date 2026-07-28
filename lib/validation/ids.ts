@@ -10,8 +10,31 @@ export function isUuid(value: string): boolean {
   return UUID.test(value.trim())
 }
 
-export function uuidsOnly(values: string[]): string[] {
-  return values.map((value) => value.trim()).filter(isUuid)
+/**
+ * The ids in a list of picked values: real ids, each appearing once, in the
+ * order they were picked.
+ *
+ * Both halves matter for a join table keyed on (trip, person). Anything not an
+ * id fails the insert outright, and the same id twice collides with itself —
+ * either way the whole batch is rejected and the trip ends up with nobody
+ * aboard. Compared case-insensitively, since two spellings of one id are still
+ * one person.
+ */
+export function uniqueUuids(values: string[]): string[] {
+  const seen = new Set<string>()
+  const ids: string[] = []
+
+  for (const value of values) {
+    const id = value.trim()
+    if (!isUuid(id)) continue
+
+    const key = id.toLowerCase()
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    ids.push(id)
+  }
+  return ids
 }
 
 /**

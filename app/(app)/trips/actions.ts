@@ -6,7 +6,7 @@ import { requireCrew } from '@/lib/auth/membership'
 import { createClient } from '@/lib/supabase/server'
 import { buildSnapshot } from '@/lib/conditions/snapshot'
 import { tripSchema } from '@/lib/validation/schemas'
-import { uuidsOnly } from '@/lib/validation/ids'
+import { uniqueUuids } from '@/lib/validation/ids'
 
 export type TripFormState =
   | { status: 'idle' }
@@ -99,65 +99,15 @@ type PersistResult =
     }
 
 /**
- * The picked crew and site ids, keeping only things actually shaped like ids.
+ * The picked crew and site ids: real ids, each once, in the order picked.
  *
- * These arrive as repeated form fields rather than through the trip schema, and
- * used to go to the database exactly as received. One malformed value was
- * enough to fail the whole insert, which is how a trip came to be saved with
- * nobody aboard: a stray NUL character in one id made the request body invalid
- * JSON as far as Postgres was concerned, and it rejected every row in the
- * batch rather than the one bad value. Anything not shaped like an id was never
- * a real person or place, so dropping it loses nothing and keeps the rest.
+ * These arrive as repeated form fields rather than through the trip schema, so
+ * nothing else validates them. Both halves matter, because either a malformed
+ * value or the same id twice fails the whole batch, and the trip ends up with
+ * nobody aboard rather than with one bad row skipped.
  */
 function idList(formData: FormData, field: string): string[] {
-  return uuidsOnly(formData.getAll(field).map(String))
-}
-
-/**
- * Replace who was aboard, wholesale.
- *
- * Returns a message on failure rather than throwing, so a half-written trip
- * reports what went wrong instead of looking like a clean save.
- */
-async function replacePassengers(
-  tripId: string,
-  crewIds: string[],
-): Promise<string | null> {
-  const supabase = await createClient()
-
-  const { error: clearError } = await supabase
-    .from('trip_passengers')
-    .delete()
-    .eq('trip_id', tripId)
-  if (clearError) return clearError.message
-
-  if (crewIds.length === 0) return null
-
-  const { error } = await supabase
-    .from('trip_passengers')
-    .insert(crewIds.map((crewId) => ({ trip_id: tripId, crew_id: crewId })))
-  return error?.message ?? null
-}
-
-/** As above, for the sites a trip visited. */
-async function replaceSites(
-  tripId: string,
-  siteIds: string[],
-): Promise<string | null> {
-  const supabase = await createClient()
-
-  const { error: clearError } = await supabase
-    .from('trip_sites')
-    .delete()
-    .eq('trip_id', tripId)
-  if (clearError) return clearError.message
-
-  if (siteIds.length === 0) return null
-
-  const { error } = await supabase
-    .from('trip_sites')
-    .insert(siteIds.map((siteId) => ({ trip_id: tripId, site_id: siteId })))
-  return error?.message ?? null
+  return uniqueUuids(formData.getAll(field).map(String))
 }
 
 /**
@@ -203,12 +153,16 @@ async function persistTrip(formData: FormData): Promise<PersistResult> {
   // Reported rather than ignored. These failing used to leave the trip saved,
   // the redirect happening, and nobody aboard — with nothing anywhere saying
   // so, which is a miserable thing to have to notice for yourself.
-  const linkError =
-    (await replacePassengers(trip.id, crewIds)) ??
-    (await replaceSites(trip.id, siteIds))
+  // One transaction for both lists. As two requests, a failed insert left the
+  // already-committed delete standing and the trip lost the crew it had.
+  const { error: linkError } = await supabase.rpc('set_trip_links', {
+    p_trip: trip.id,
+    p_crew: crewIds,
+    p_sites: siteIds,
+  })
 
   if (linkError) {
-    return { ok: false, tripId: trip.id, message: linkError }
+    return { ok: false, tripId: trip.id, message: linkError.message }
   }
 
   await attachConditions(trip.id)
