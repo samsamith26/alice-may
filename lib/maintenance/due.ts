@@ -72,6 +72,13 @@ export type DueItem = {
 const HOURS_WARNING_FRACTION = 0.1
 const DAYS_WARNING_WINDOW = 30
 
+/**
+ * How far ahead of a fixed annual date a payment still counts as settling it.
+ * Wide enough for the usual fortnight or month of lead time, narrow enough that
+ * a payment a season early cannot be mistaken for next year's.
+ */
+const EARLY_PAYMENT_WINDOW_DAYS = 60
+
 const STATUS_ORDER: Record<DueStatus, number> = { overdue: 0, soon: 1, ok: 2 }
 
 function addMonths(iso: string, months: number): string {
@@ -97,14 +104,40 @@ function occurrence(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(clamped).padStart(2, '0')}`
 }
 
+function daysApart(fromIso: string, toIso: string): number {
+  return Math.round(
+    (Date.parse(`${toIso}T12:00:00Z`) - Date.parse(`${fromIso}T12:00:00Z`)) /
+      86_400_000,
+  )
+}
+
+/**
+ * Which year's bill a payment settles.
+ *
+ * Bills get paid before the date on the invoice — rent a fortnight early, a
+ * tax bill the week it arrives. So a payment shortly before an occurrence
+ * settles that occurrence, not the one a year behind it. Outside that window it
+ * belongs to the occurrence that had already passed when it was made, which is
+ * what keeps a skipped year visible.
+ */
+function cycleSettledBy(paymentIso: string, month: number, day: number): string {
+  const year = Number(paymentIso.slice(0, 4))
+  const thisYear = occurrence(year, month, day)
+
+  const upcoming = thisYear >= paymentIso ? thisYear : occurrence(year + 1, month, day)
+  if (daysApart(paymentIso, upcoming) <= EARLY_PAYMENT_WINDOW_DAYS) return upcoming
+
+  return thisYear <= paymentIso ? thisYear : occurrence(year - 1, month, day)
+}
+
 /**
  * When a fixed-annual item is next due.
  *
- * Works from the cycle currently in force — the most recent occurrence of the
- * date that has already arrived. Paying inside that cycle rolls the item on to
- * next year; not paying leaves it sitting on a date in the past, which is what
- * makes it overdue. A payment logged for an older cycle does not count, so a
- * year that was missed stays missed.
+ * Measured against the cycle currently in force — the most recent occurrence of
+ * the date that has already arrived. Settling that cycle rolls the item on to
+ * next year; leaving it unsettled leaves the item sitting on a date in the
+ * past, which is what makes it overdue. A payment that settled an older cycle
+ * does not count, so a year that was missed stays missed.
  *
  * ISO dates compare correctly as strings, so no parsing is needed.
  */
@@ -118,12 +151,15 @@ export function annualDueDate(
   const year = Number(todayIso.slice(0, 4))
 
   const thisYear = occurrence(year, month, day)
-  const cycleStart = thisYear <= todayIso ? thisYear : occurrence(year - 1, month, day)
+  const currentCycle = thisYear <= todayIso ? thisYear : occurrence(year - 1, month, day)
 
-  if (lastServiceDate !== null && lastServiceDate >= cycleStart) {
-    return occurrence(Number(cycleStart.slice(0, 4)) + 1, month, day)
+  if (lastServiceDate !== null) {
+    const settled = cycleSettledBy(lastServiceDate, month, day)
+    if (settled >= currentCycle) {
+      return occurrence(Number(settled.slice(0, 4)) + 1, month, day)
+    }
   }
-  return cycleStart
+  return currentCycle
 }
 
 function computeItem(

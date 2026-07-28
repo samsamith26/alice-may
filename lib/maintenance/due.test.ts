@@ -290,6 +290,87 @@ describe('computeDueStatus, fixed annual items', () => {
     expect(item.status).toBe('ok')
   })
 
+  it('credits a payment made shortly before the date to that cycle', () => {
+    // Rent for the 1 July cycle, paid on 18 June. Crediting it to the July 2025
+    // cycle instead would leave the bill reading overdue two weeks after it was
+    // actually settled.
+    const [item] = computeDueStatus(
+      [rent],
+      [
+        {
+          service_type: 'Rent',
+          service_date: '2026-06-18',
+          engine_hours_at_service: null,
+        },
+      ],
+      null,
+      today,
+    )
+    expect(item.dueOnDate).toBe('2027-07-01')
+    expect(item.status).toBe('ok')
+  })
+
+  it('counts a payment exactly at the edge of the early window', () => {
+    // 2 May is 60 days before 1 July.
+    const [item] = computeDueStatus(
+      [rent],
+      [
+        {
+          service_type: 'Rent',
+          service_date: '2026-05-02',
+          engine_hours_at_service: null,
+        },
+      ],
+      null,
+      today,
+    )
+    expect(item.dueOnDate).toBe('2027-07-01')
+  })
+
+  it('treats a payment months ahead as settling the previous cycle', () => {
+    // January is too far from the following July to be early payment for it, so
+    // this settles July 2025 and July 2026 is still outstanding.
+    const [item] = computeDueStatus(
+      [rent],
+      [
+        {
+          service_type: 'Rent',
+          service_date: '2026-01-15',
+          engine_hours_at_service: null,
+        },
+      ],
+      null,
+      today,
+    )
+    expect(item.dueOnDate).toBe('2026-07-01')
+    expect(item.status).toBe('overdue')
+  })
+
+  it('credits an early payment made before the date has come round', () => {
+    // 27 July, for a bill due 1 August. The August cycle has not arrived, so
+    // the item was not even due yet — and is now settled through next year.
+    const propertyTax = {
+      ...rent,
+      service_type: 'Property tax',
+      annual_due_month: 8,
+      annual_due_day: 1,
+    }
+    const [item] = computeDueStatus(
+      [propertyTax],
+      [
+        {
+          service_type: 'Property tax',
+          service_date: '2026-07-27',
+          engine_hours_at_service: null,
+        },
+      ],
+      null,
+      today,
+    )
+    expect(item.dueOnDate).toBe('2027-08-01')
+    expect(item.status).toBe('ok')
+  })
+
   it('never reports an hour figure, whatever the engine is reading', () => {
     const [item] = computeDueStatus([rent], [], 4000, today)
     expect(item.dueAtHours).toBeNull()
