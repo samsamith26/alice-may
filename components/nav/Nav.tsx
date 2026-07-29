@@ -7,13 +7,19 @@ import type { Role } from '@/lib/auth/membership'
 import type { Theme } from '@/app/theme/actions'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
-const PRIMARY = [
+/**
+ * `tab` is the label for the bottom bar, where six items share a phone's width
+ * and the type is set in tracked caps. "Fuel & cost" needs about half again the
+ * room a tab has, so that one carries a short form; everything else is already
+ * short enough to say the same thing in both places.
+ */
+const PRIMARY: ReadonlyArray<{ href: string; label: string; tab?: string }> = [
   { href: '/trips', label: 'Trips' },
   { href: '/map', label: 'Map' },
-  { href: '/fuel', label: 'Fuel' },
+  { href: '/fuel', label: 'Fuel / Cost', tab: 'Cost' },
   { href: '/maintenance', label: 'Service' },
   { href: '/tides', label: 'Tides' },
-] as const
+]
 
 const MORE = [
   { href: '/stats', label: 'Lifetime stats', crewOnly: false },
@@ -60,7 +66,7 @@ export function NavTabs({ role, compact = false }: { role: Role; compact?: boole
                     }`
               }
             >
-              {item.label}
+              {compact ? (item.tab ?? item.label) : item.label}
             </Link>
           </li>
         )

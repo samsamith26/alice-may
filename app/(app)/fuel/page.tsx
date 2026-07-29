@@ -94,7 +94,7 @@ export default async function FuelPage() {
 
       <Card className="flex flex-col gap-3">
         <div>
-          <h2 className="font-semibold">Fuel efficiency over time</h2>
+          <Annotation>Fuel efficiency over time</Annotation>
           <p className="mt-1 text-sm text-hull-700/75 dark:text-chart-200/65">
             A steady drop in nautical miles per gallon is the first sign of a
             fouled prop or a sick injector — usually well before anything sounds
