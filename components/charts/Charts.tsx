@@ -227,7 +227,7 @@ export function BarChart({
 }
 
 /**
- * Ranked amounts, laid on their sides. One row per category: name, bar, figure.
+ * Ranked amounts, laid on their sides.
  *
  * Horizontal because the categories here are things like "Anodes / zincs" and
  * "Thruster battery", which will not fit under a vertical bar at any size worth
@@ -235,16 +235,10 @@ export function BarChart({
  * routinely holds three quarters of the total and the rest are slivers, which is
  * exactly the shape a pie renders worst.
  *
- * The figure sits inside its bar whenever the bar is long enough to hold it.
- * Given it a column of its own on the right, that column plus the name gutter
- * ate nearly half the width and the longest bar could never reach much past the
- * middle of the card. Only the short bars need to put their figure outside, and
- * by definition those have room to spare.
- *
  * One colour throughout. Every bar measures the same thing, so a different hue
- * per row would be colour standing for nothing — the name already says which row
- * is which. Every bar is labelled rather than relying on hover, because a phone
- * at the helm has none.
+ * per row would be colour standing for nothing — the label already carries which
+ * row is which. Figures are printed on every bar because there are few enough
+ * rows for that to stay quiet, and because a boat at the helm has no hover.
  */
 export function HBarChart({
   bars,
@@ -259,16 +253,23 @@ export function HBarChart({
 
   const ROW = 13
   const GAP = 9
-  /** Enough for the longest service type this boat has; names start at zero. */
-  const GUTTER = 92
+  /**
+   * Sized to the longest name the schedule can produce — "Engine oil & filter"
+   * and its kin, around 68 units at this size — plus a little air. It was 112,
+   * which left a band of nothing down the left of every row and took that width
+   * straight off the bars.
+   */
+  const GUTTER = 76
+  /** Enough for "$15,236" and the gap before it, and not a unit more. */
+  const VALUE_SPACE = 40
   const top = 4
 
   const height = bars.length * (ROW + GAP) - GAP + top * 2
-  const track = WIDTH - GUTTER - 2
+  const track = WIDTH - GUTTER - VALUE_SPACE
   const largest = Math.max(...bars.map((bar) => bar.value), 0)
 
   return (
-    <figure className="-mx-2">
+    <figure>
       <svg
         viewBox={`0 0 ${WIDTH} ${height}`}
         className="w-full"
@@ -280,16 +281,12 @@ export function HBarChart({
         {bars.map((bar, index) => {
           const rowTop = top + index * (ROW + GAP)
           const width = largest > 0 ? Math.max(1, (bar.value / largest) * track) : 1
-          const figure = formatValue(bar.value)
-          // Roughly what the figure needs; short bars put theirs outside.
-          const inside = width > figure.length * 4.6 + 12
-          const baseline = rowTop + ROW - 3.5
-
           return (
             <g key={bar.label}>
               <text
-                x={0}
-                y={baseline}
+                x={GUTTER - 6}
+                y={rowTop + ROW - 3}
+                textAnchor="end"
                 className="fill-hull-800/75 text-[8px] dark:fill-chart-200/70"
               >
                 {bar.label}
@@ -303,17 +300,12 @@ export function HBarChart({
                 className="fill-shoal-500/85"
               />
               <text
-                x={inside ? GUTTER + width - 5 : GUTTER + width + 5}
-                y={baseline}
-                textAnchor={inside ? 'end' : 'start'}
-                className={
-                  inside
-                    ? 'fill-hull-950 text-[8px] font-semibold'
-                    : 'fill-hull-900 text-[8px] font-semibold dark:fill-chart-100'
-                }
+                x={GUTTER + width + 5}
+                y={rowTop + ROW - 3}
+                className="fill-hull-900 text-[8px] font-semibold dark:fill-chart-100"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {figure}
+                {formatValue(bar.value)}
               </text>
             </g>
           )
