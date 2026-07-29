@@ -23,7 +23,8 @@
 --   20260728005939  seed_recurring_bills
 --   20260728013925  intervals_with_units_drop_overrides
 --   20260728015309  bills_return_to_fixed_annual_dates
---   20260728025231  set_trip_links_atomically
+--   20260728024947  set_trip_links_atomically
+--   20260729170532  seed_insurance_bill
 
 -- ============================================================ core_access ==
 
@@ -845,3 +846,19 @@ end
 $$;
 
 grant execute on function public.set_trip_links(uuid, uuid[], uuid[]) to authenticated;
+
+-- ============================================================ seed_insurance_bill ==
+
+-- Insurance renews on 5 December. Same footing as the other bills: a fixed
+-- calendar date, not an interval, so paying late does not move next year's.
+-- Guarded by service_type so re-running cannot duplicate it.
+insert into public.maintenance_schedule
+  (boat_id, service_type, category, annual_due_month, annual_due_day)
+select boats.id, 'Insurance', 'bill', 12, 5
+from public.boats
+where not exists (
+  select 1
+  from public.maintenance_schedule existing
+  where existing.boat_id = boats.id
+    and existing.service_type = 'Insurance'
+);
