@@ -1,9 +1,11 @@
 import { requireMembership } from '@/lib/auth/membership'
 import { createClient } from '@/lib/supabase/server'
 import { BarChart, LineChart } from '@/components/charts/Charts'
+import { SpendByType } from '@/components/fuel/SpendByType'
 import { Annotation, Card, StatTile } from '@/components/ui/primitives'
 import { gallonsPerHour, nmPerGallon, summariseFleet } from '@/lib/trips/derive'
-import { formatGallons, formatMoney } from '@/lib/format/units'
+import { spendEntries, spendYears } from '@/lib/fuel/spend'
+import { formatDollars, formatGallons, formatMoney } from '@/lib/format/units'
 
 export default async function FuelPage() {
   const membership = await requireMembership()
@@ -19,7 +21,7 @@ export default async function FuelPage() {
       .order('trip_date'),
     supabase
       .from('maintenance_log')
-      .select('service_date, cost')
+      .select('service_date, service_type, cost')
       .eq('boat_id', membership.boatId),
   ])
 
@@ -59,6 +61,10 @@ export default async function FuelPage() {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([year, value]) => ({ label: year, value: Math.round(value) }))
 
+  // Fuel and everything in the maintenance log are both spend, so the
+  // breakdown draws on the same two queries the annual totals already use.
+  const entries = spendEntries(rows, services ?? [])
+
   const thisYear = String(new Date().getFullYear())
   const priciest = rows.reduce<number>(
     (max, trip) => Math.max(max, trip.fuel_cost_usd ?? 0),
@@ -67,7 +73,7 @@ export default async function FuelPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-2xl font-semibold tracking-tight">Fuel &amp; cost</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Fuel &amp; Cost</h1>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
@@ -88,7 +94,7 @@ export default async function FuelPage() {
 
       <Card className="flex flex-col gap-3">
         <div>
-          <h2 className="font-semibold">Efficiency over time</h2>
+          <h2 className="font-semibold">Fuel efficiency over time</h2>
           <p className="mt-1 text-sm text-hull-700/75 dark:text-chart-200/65">
             A steady drop in nautical miles per gallon is the first sign of a
             fouled prop or a sick injector — usually well before anything sounds
@@ -114,8 +120,16 @@ export default async function FuelPage() {
       </Card>
 
       <Card className="flex flex-col gap-3">
-        <Annotation>Spend by year — fuel and service</Annotation>
-        <BarChart bars={annualSpend} emptyMessage="No spending recorded yet" />
+        <Annotation>Spend by year</Annotation>
+        <BarChart
+          bars={annualSpend}
+          formatValue={formatDollars}
+          emptyMessage="No spending recorded yet"
+        />
+      </Card>
+
+      <Card>
+        <SpendByType entries={entries} years={spendYears(entries)} />
       </Card>
     </div>
   )

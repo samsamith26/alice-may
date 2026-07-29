@@ -83,6 +83,15 @@ export function formatMoney(usd: number | null | undefined): string {
   return `$${usd.toFixed(2)}`
 }
 
+/**
+ * Whole dollars, with separators. For chart labels and running totals, where
+ * cents on four figures are noise and the column needs to stay narrow.
+ */
+export function formatDollars(usd: number | null | undefined): string {
+  if (usd === null || usd === undefined || !Number.isFinite(usd)) return EM_DASH
+  return `$${Math.round(usd).toLocaleString('en-US')}`
+}
+
 /** Rounds to whole knots — nobody reads wind speed to a decimal place. */
 export function formatKnots(knots: number | null | undefined): string {
   if (knots === null || knots === undefined || !Number.isFinite(knots)) {

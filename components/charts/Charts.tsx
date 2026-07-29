@@ -150,11 +150,14 @@ export function BarChart({
   bars,
   height = 180,
   yLabel,
+  formatValue,
   emptyMessage = 'Nothing to chart yet',
 }: {
   bars: Array<{ label: string; value: number }>
   height?: number
   yLabel?: string
+  /** Supply to print each bar's figure above it, for charts read as amounts. */
+  formatValue?: (value: number) => string
   emptyMessage?: string
 }) {
   if (bars.length === 0) return <EmptyState title={emptyMessage} />
@@ -177,7 +180,7 @@ export function BarChart({
         className="w-full"
         role="img"
         aria-label={`${yLabel ?? 'Chart'}: ${bars
-          .map((b) => `${b.label} ${b.value}`)
+          .map((b) => `${b.label} ${formatValue ? formatValue(b.value) : b.value}`)
           .join(', ')}`}
       >
         <Grid ticks={ticks} y={y} height={height} />
@@ -194,6 +197,19 @@ export function BarChart({
                 rx="1.5"
                 className="fill-shoal-500/85"
               />
+              {formatValue ? (
+                // Above the bar, in ink rather than the bar's own colour: the
+                // figure is a label, and the teal is already saying "amount".
+                <text
+                  x={centre}
+                  y={Math.max(7, top - 4)}
+                  textAnchor="middle"
+                  className="fill-hull-900 text-[8px] font-semibold dark:fill-chart-100"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {formatValue(bar.value)}
+                </text>
+              ) : null}
               <text
                 x={centre}
                 y={height - PAD.bottom + 12}
@@ -201,6 +217,88 @@ export function BarChart({
                 className="fill-hull-800/65 text-[8px] dark:fill-chart-200/60"
               >
                 {bar.label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </figure>
+  )
+}
+
+/**
+ * Ranked amounts, laid on their sides.
+ *
+ * Horizontal because the categories here are things like "Anodes / zincs" and
+ * "Thruster battery", which will not fit under a vertical bar at any size worth
+ * reading, and because a ranked list is read down the page. Not a pie: one slice
+ * routinely holds three quarters of the total and the rest are slivers, which is
+ * exactly the shape a pie renders worst.
+ *
+ * One colour throughout. Every bar measures the same thing, so a different hue
+ * per row would be colour standing for nothing — the label already carries which
+ * row is which. Figures are printed on every bar because there are few enough
+ * rows for that to stay quiet, and because a boat at the helm has no hover.
+ */
+export function HBarChart({
+  bars,
+  formatValue,
+  emptyMessage = 'Nothing to chart yet',
+}: {
+  bars: Array<{ label: string; value: number }>
+  formatValue: (value: number) => string
+  emptyMessage?: string
+}) {
+  if (bars.length === 0) return <EmptyState title={emptyMessage} />
+
+  const ROW = 13
+  const GAP = 9
+  const GUTTER = 112
+  const VALUE_SPACE = 46
+  const top = 4
+
+  const height = bars.length * (ROW + GAP) - GAP + top * 2
+  const track = WIDTH - GUTTER - VALUE_SPACE
+  const largest = Math.max(...bars.map((bar) => bar.value), 0)
+
+  return (
+    <figure>
+      <svg
+        viewBox={`0 0 ${WIDTH} ${height}`}
+        className="w-full"
+        role="img"
+        aria-label={`Spend by type: ${bars
+          .map((bar) => `${bar.label} ${formatValue(bar.value)}`)
+          .join(', ')}`}
+      >
+        {bars.map((bar, index) => {
+          const rowTop = top + index * (ROW + GAP)
+          const width = largest > 0 ? Math.max(1, (bar.value / largest) * track) : 1
+          return (
+            <g key={bar.label}>
+              <text
+                x={GUTTER - 6}
+                y={rowTop + ROW - 3}
+                textAnchor="end"
+                className="fill-hull-800/75 text-[8px] dark:fill-chart-200/70"
+              >
+                {bar.label}
+              </text>
+              <rect
+                x={GUTTER}
+                y={rowTop}
+                width={width}
+                height={ROW}
+                rx="2"
+                className="fill-shoal-500/85"
+              />
+              <text
+                x={GUTTER + width + 5}
+                y={rowTop + ROW - 3}
+                className="fill-hull-900 text-[8px] font-semibold dark:fill-chart-100"
+                style={{ fontVariantNumeric: 'tabular-nums' }}
+              >
+                {formatValue(bar.value)}
               </text>
             </g>
           )
