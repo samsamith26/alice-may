@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { latestEngineHours, startHoursDefault } from './hours'
+import { latestEngineHours } from './hours'
 
 describe('latestEngineHours', () => {
   it('takes the higher of the last trip and the last service', () => {
@@ -24,52 +24,5 @@ describe('latestEngineHours', () => {
 
   it('treats zero as a reading, not as nothing', () => {
     expect(latestEngineHours(0, null)).toBe(0)
-  })
-})
-
-describe('startHoursDefault', () => {
-  it('prefills a new trip with the current hours', () => {
-    expect(
-      startHoursDefault({ isNewTrip: true, saved: undefined, draft: undefined, current: 1234.5 }),
-    ).toBe('1234.5')
-  })
-
-  it('leaves a new trip blank when there is no reading yet', () => {
-    expect(
-      startHoursDefault({ isNewTrip: true, saved: undefined, draft: undefined, current: null }),
-    ).toBe('')
-  })
-
-  it('never overwrites an existing trip, even a blank one', () => {
-    expect(
-      startHoursDefault({ isNewTrip: false, saved: '1100', draft: undefined, current: 1234.5 }),
-    ).toBe('1100')
-    expect(
-      startHoursDefault({ isNewTrip: false, saved: undefined, draft: undefined, current: 1234.5 }),
-    ).toBe('')
-  })
-
-  it('lets a restored draft win over the prefill', () => {
-    expect(
-      startHoursDefault({ isNewTrip: true, saved: undefined, draft: '1229', current: 1234.5 }),
-    ).toBe('1229')
-  })
-
-  it('lets a restored draft win over the saved value when editing', () => {
-    expect(
-      startHoursDefault({ isNewTrip: false, saved: '1100', draft: '1101', current: 1234.5 }),
-    ).toBe('1101')
-  })
-
-  it('keeps an edit draft that emptied the field, as the rest of the form does', () => {
-    expect(
-      startHoursDefault({ isNewTrip: false, saved: '1100', draft: '', current: 1234.5 }),
-    ).toBe('')
-  })
-
-  it('falls back to the prefill when a new-trip draft left the field empty', () => {
-    expect(
-      startHoursDefault({ isNewTrip: true, saved: undefined, draft: '  ', current: 1234.5 }),
-    ).toBe('1234.5')
   })
 })

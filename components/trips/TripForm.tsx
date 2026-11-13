@@ -21,7 +21,9 @@ import {
   type DraftValues,
 } from '@/lib/offline/drafts'
 import { uniqueUuids } from '@/lib/validation/ids'
-import { startHoursDefault } from '@/lib/engine/hours'
+import { newTripDefault } from '@/lib/trips/prefill'
+import { shortDate, todayInZone } from '@/lib/format/dates'
+import type { FuelReading } from '@/lib/db/queries'
 import { CrewPicker } from './CrewPicker'
 import { DistanceFields } from './DistanceFields'
 
@@ -158,6 +160,7 @@ export function TripForm({
   savedAt,
   draftKey,
   currentEngineHours = null,
+  lastFuelReading = null,
 }: {
   values?: TripFormValues
   crewOptions: PickerOption[]
@@ -172,6 +175,11 @@ export function TripForm({
    * trip only; the edit page does not pass it.
    */
   currentEngineHours?: number | null
+  /**
+   * The gauge at the end of the last trip that recorded one. Prefills
+   * "Gallons used at start" on a new trip only.
+   */
+  lastFuelReading?: FuelReading | null
 }) {
   const [state, formAction, pending] = useActionState<TripFormState, FormData>(
     saveTrip,
@@ -227,12 +235,26 @@ export function TripForm({
 
   const initial = { ...values, ...restoredSingles }
   const isNewTrip = !values.id
-  const startHours = startHoursDefault({
+  // Prefills: starting values only, for new trips, and never over a draft.
+  const startHours = newTripDefault({
     isNewTrip,
     saved: values.engine_hours_start,
     draft: restoredSingles.engine_hours_start,
-    current: currentEngineHours,
+    prefill: currentEngineHours,
   })
+  const startGauge = newTripDefault({
+    isNewTrip,
+    saved: values.fuel_from_full_start_gal,
+    draft: restoredSingles.fuel_from_full_start_gal,
+    prefill: lastFuelReading?.gal ?? null,
+  })
+  const gaugeHint =
+    isNewTrip && lastFuelReading
+      ? `Last trip ended at ${lastFuelReading.gal} gal (${shortDate(
+          lastFuelReading.tripDate,
+          todayInZone(new Date()),
+        )})`
+      : undefined
   const errors = state.status === 'error' ? (state.fieldErrors ?? {}) : {}
   // A save that got as far as writing the trip before failing. Retrying has to
   // update that row, not log the outing twice.
@@ -383,13 +405,10 @@ export function TripForm({
         <div className="grid gap-3 sm:grid-cols-3">
           <Field
             label="Gallons used at start (from full)"
+            hint={gaugeHint}
             error={errors.fuel_from_full_start_gal?.[0]}
           >
-            <NumberInput
-              name="fuel_from_full_start_gal"
-              step="0.1"
-              defaultValue={initial.fuel_from_full_start_gal ?? ''}
-            />
+            <NumberInput name="fuel_from_full_start_gal" step="0.1" defaultValue={startGauge} />
           </Field>
           <Field label="Gallons added" error={errors.fuel_added_gal?.[0]}>
             <NumberInput

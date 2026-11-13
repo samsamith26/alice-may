@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { startHoursDefault } from '@/lib/engine/hours'
+import { newTripDefault } from '@/lib/trips/prefill'
 import { tripSchema } from './schemas'
 
 /** A new trip as the form submits it, with "Hours at start" prefilled. */
@@ -11,11 +11,11 @@ function submission(end: string) {
   return {
     ...blank,
     trip_date: '2026-11-13',
-    engine_hours_start: startHoursDefault({
+    engine_hours_start: newTripDefault({
       isNewTrip: true,
       saved: undefined,
       draft: undefined,
-      current: 278.3,
+      prefill: 278.3,
     }),
     engine_hours_end: end,
   }
@@ -39,5 +39,30 @@ describe('tripSchema with a prefilled start reading', () => {
     if (!result.success) {
       expect(result.error.issues[0]?.path).toEqual(['engine_hours_end'])
     }
+  })
+})
+
+describe('tripSchema with a prefilled fuel gauge', () => {
+  const blank = Object.fromEntries(Object.keys(tripSchema.shape).map((key) => [key, '']))
+  const gauge = newTripDefault({ isNewTrip: true, saved: undefined, draft: undefined, prefill: 23.5 })
+
+  it('saves the prefilled start gauge alongside an end reading', () => {
+    const parsed = tripSchema.parse({
+      ...blank,
+      trip_date: '2026-11-13',
+      fuel_from_full_start_gal: gauge,
+      fuel_from_full_end_gal: '31.2',
+    })
+    expect(parsed.fuel_from_full_start_gal).toBe(23.5)
+    expect(parsed.fuel_from_full_end_gal).toBe(31.2)
+  })
+
+  it('treats a cleared prefill as not recorded, never as zero', () => {
+    const parsed = tripSchema.parse({
+      ...blank,
+      trip_date: '2026-11-13',
+      fuel_from_full_start_gal: '',
+    })
+    expect(parsed.fuel_from_full_start_gal).toBeNull()
   })
 })

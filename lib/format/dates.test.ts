@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDaysIso, todayInZone } from './dates'
+import { addDaysIso, shortDate, todayInZone } from './dates'
 
 describe('todayInZone', () => {
   it('gives the Pacific date, not the UTC one, late in the evening', () => {
@@ -31,5 +31,16 @@ describe('addDaysIso', () => {
 
   it('goes backwards too', () => {
     expect(addDaysIso('2026-01-01', -1)).toBe('2025-12-31')
+  })
+})
+
+describe('shortDate', () => {
+  it('drops the year for dates this year', () => {
+    expect(shortDate('2026-11-08', '2026-11-13')).toBe('Nov 8')
+    expect(shortDate('2026-01-31', '2026-11-13')).toBe('Jan 31')
+  })
+
+  it('keeps the year for dates in another year', () => {
+    expect(shortDate('2025-12-28', '2026-01-02')).toBe('Dec 28, 2025')
   })
 })

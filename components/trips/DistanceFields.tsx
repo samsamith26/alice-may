@@ -9,7 +9,8 @@ import {
 } from '@/lib/format/units'
 
 /**
- * Nautical and statute miles as a linked pair.
+ * Statute and nautical miles as a linked pair, miles first to match the rest
+ * of the app.
  *
  * Only the field the user is NOT typing in gets rewritten. Recomputing the
  * typed field from its own converted output would round-trip the number and
@@ -18,7 +19,7 @@ import {
  * entered.
  *
  * Only distance_nm is submitted; statute miles is a generated column derived
- * from it in the database.
+ * from it in the database. The miles box has no name, so it never posts.
  */
 export function DistanceFields({
   defaultNm,
@@ -45,16 +46,8 @@ export function DistanceFields({
 
   return (
     <div className="flex flex-col gap-1.5">
+      {/* DOM order is tab order: miles, then nm. */}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Distance (nm)" error={error}>
-          <NumberInput
-            name="distance_nm"
-            step="0.1"
-            inputMode="decimal"
-            value={nm}
-            onChange={(event) => onNmChange(event.target.value)}
-          />
-        </Field>
         <Field label="Distance (miles)">
           <NumberInput
             step="0.1"
@@ -64,10 +57,19 @@ export function DistanceFields({
             aria-label="Distance in statute miles"
           />
         </Field>
+        <Field label="Distance (nm)" error={error}>
+          <NumberInput
+            name="distance_nm"
+            step="0.1"
+            inputMode="decimal"
+            value={nm}
+            onChange={(event) => onNmChange(event.target.value)}
+            aria-label="Distance in nautical miles"
+          />
+        </Field>
       </div>
       <p className="text-xs text-hull-700/70 dark:text-chart-200/60">
-        Enter either one — the other follows. Nautical miles is what gets
-        stored and what the fuel economy figures use.
+        Enter either one, the other fills in.
       </p>
     </div>
   )

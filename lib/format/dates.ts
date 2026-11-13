@@ -26,3 +26,19 @@ export function addDaysIso(iso: string, days: number): string {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+const SHORT_MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const
+
+/**
+ * A YYYY-MM-DD date as "Nov 8", or "Nov 8, 2025" when it is not in the same
+ * year as `todayIso`. Built by hand rather than with toLocaleDateString so it
+ * reads the same on the server and on any phone.
+ */
+export function shortDate(iso: string, todayIso: string): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  const label = `${SHORT_MONTHS[month - 1]} ${day}`
+  return iso.slice(0, 4) === todayIso.slice(0, 4) ? label : `${label}, ${year}`
+}
