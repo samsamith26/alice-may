@@ -1,12 +1,13 @@
 import { requireCrew } from '@/lib/auth/membership'
-import { getCrewOptions, getSiteOptions } from '@/lib/db/queries'
+import { getCrewOptions, getCurrentEngineHours, getSiteOptions } from '@/lib/db/queries'
 import { TripForm } from '@/components/trips/TripForm'
 
 export default async function NewTripPage() {
   const membership = await requireCrew()
-  const [crewOptions, siteOptions] = await Promise.all([
+  const [crewOptions, siteOptions, currentEngineHours] = await Promise.all([
     getCrewOptions(membership.boatId),
     getSiteOptions(membership.boatId),
+    getCurrentEngineHours(membership.boatId),
   ])
 
   return (
@@ -16,6 +17,7 @@ export default async function NewTripPage() {
         crewOptions={crewOptions}
         siteOptions={siteOptions}
         draftKey="trip-new"
+        currentEngineHours={currentEngineHours}
       />
     </div>
   )

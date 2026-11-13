@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { latestEngineHours } from '@/lib/engine/hours'
 
 export type Boat = {
   id: string
@@ -30,17 +31,32 @@ export async function getBoat(boatId: string): Promise<Boat | null> {
  * the most recent trip — an hour meter only counts up, and a trip entered out
  * of order should not appear to wind it back.
  */
+/**
+ * The engine's current hours: the highest reading from either the end of a
+ * trip or a service entry. A service logged after an untracked run can be
+ * the newer figure, so trips alone would under-report.
+ */
 export async function getCurrentEngineHours(boatId: string): Promise<number | null> {
   const supabase = await createClient()
-  const { data } = await supabase
-    .from('trips')
-    .select('engine_hours_end')
-    .eq('boat_id', boatId)
-    .not('engine_hours_end', 'is', null)
-    .order('engine_hours_end', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return data?.engine_hours_end ?? null
+  const [{ data: trip }, { data: service }] = await Promise.all([
+    supabase
+      .from('trips')
+      .select('engine_hours_end')
+      .eq('boat_id', boatId)
+      .not('engine_hours_end', 'is', null)
+      .order('engine_hours_end', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('maintenance_log')
+      .select('engine_hours_at_service')
+      .eq('boat_id', boatId)
+      .not('engine_hours_at_service', 'is', null)
+      .order('engine_hours_at_service', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+  return latestEngineHours(trip?.engine_hours_end, service?.engine_hours_at_service)
 }
 
 export async function getCrewOptions(boatId: string) {

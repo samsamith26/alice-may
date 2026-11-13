@@ -21,6 +21,7 @@ import {
   type DraftValues,
 } from '@/lib/offline/drafts'
 import { uniqueUuids } from '@/lib/validation/ids'
+import { startHoursDefault } from '@/lib/engine/hours'
 import { CrewPicker } from './CrewPicker'
 import { DistanceFields } from './DistanceFields'
 
@@ -156,6 +157,7 @@ export function TripForm({
   selectedSiteIds = [],
   savedAt,
   draftKey,
+  currentEngineHours = null,
 }: {
   values?: TripFormValues
   crewOptions: PickerOption[]
@@ -165,6 +167,11 @@ export function TripForm({
   /** When this trip was last written, for judging whether a draft is stale. */
   savedAt?: string | null
   draftKey: string
+  /**
+   * The meter's latest logged reading. Prefills "Hours at start" on a new
+   * trip only; the edit page does not pass it.
+   */
+  currentEngineHours?: number | null
 }) {
   const [state, formAction, pending] = useActionState<TripFormState, FormData>(
     saveTrip,
@@ -219,6 +226,13 @@ export function TripForm({
     : {}
 
   const initial = { ...values, ...restoredSingles }
+  const isNewTrip = !values.id
+  const startHours = startHoursDefault({
+    isNewTrip,
+    saved: values.engine_hours_start,
+    draft: restoredSingles.engine_hours_start,
+    current: currentEngineHours,
+  })
   const errors = state.status === 'error' ? (state.fieldErrors ?? {}) : {}
   // A save that got as far as writing the trip before failing. Retrying has to
   // update that row, not log the outing twice.
@@ -340,12 +354,16 @@ export function TripForm({
 
       <Section title="Engine">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Hours at start" error={errors.engine_hours_start?.[0]}>
-            <NumberInput
-              name="engine_hours_start"
-              step="0.1"
-              defaultValue={initial.engine_hours_start ?? ''}
-            />
+          <Field
+            label="Hours at start"
+            hint={
+              isNewTrip && currentEngineHours !== null
+                ? `Latest logged: ${currentEngineHours}`
+                : undefined
+            }
+            error={errors.engine_hours_start?.[0]}
+          >
+            <NumberInput name="engine_hours_start" step="0.1" defaultValue={startHours} />
           </Field>
           <Field label="Hours at end" error={errors.engine_hours_end?.[0]}>
             <NumberInput
