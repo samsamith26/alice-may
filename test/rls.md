@@ -122,7 +122,7 @@ Equivalent SQL, as Auth would call it (needs a role allowed to switch):
 
 | Scenario | Expected | Actual |
 | --- | --- | --- |
-| Non-approved address signs up | "isn't on the crew list" message; no `auth.users` row created | |
+| Non-approved address signs up | "isn't on the crew list" message; no `auth.users` row created | 2026-11-13, hook enabled: `POST /auth/v1/signup` → 403 `{"msg":"This email address is not approved for this logbook."}`; 0 rows. supabase-js surfaces `msg` as `error.message`, which the signup action matches |
 | Approved address signs up | "Check your email"; unconfirmed `auth.users` row; membership row via `on_auth_user_created`; confirm link → button → signed in | |
 | Approved address removed on /access, then signs up again (never had an account) | refused, no `auth.users` row | |
 | Approved address removed on /access *after* creating an account | membership dropped at once; signup creates nothing (user already exists); sign-in works but lands on `/no-access` | |
