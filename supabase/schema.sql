@@ -25,7 +25,7 @@
 --   20260728015309  bills_return_to_fixed_annual_dates
 --   20260728024947  set_trip_links_atomically
 --   20260729170532  seed_insurance_bill
---   (pending)       before_user_created_hook
+--   20261113161427  before_user_created_hook
 
 -- ============================================================ core_access ==
 
@@ -865,7 +865,6 @@ where not exists (
 );
 
 -- ================================================= before_user_created_hook ==
--- PENDING: not yet applied (see supabase/pending/before_user_created_hook.sql).
 
 -- The allowlist, enforced by Supabase Auth itself. Auth calls this before it
 -- writes any new auth.users row, whatever created it: signUp with a password,

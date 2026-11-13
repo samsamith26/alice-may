@@ -81,14 +81,28 @@ had already emptied the table.
 
 ## Allowlist enforced at signup (before-user-created hook)
 
-**Status: NOT YET RUN.** Written 2026-11-13 alongside the migration
-`before_user_created_hook`, which could not be applied in that session because
-the Supabase MCP was not authorised. Fill in the Actual column once the
-migration is applied and the hook is enabled under Authentication → Hooks.
+Migration `20261113161427 before_user_created_hook` applied 2026-11-13.
+Database checks below were run that day and pass. The end-to-end table still
+needs the hook enabled under Authentication → Hooks.
 
-### At the database (via MCP, inside a rolled-back transaction)
+### At the database (verified 2026-11-13)
 
-Call the function the way Auth does, as `supabase_auth_admin`:
+| Check | Expected | Actual |
+| --- | --- | --- |
+| `public.hook_before_user_created(jsonb)` exists, returns `jsonb`, security invoker | yes | yes |
+| `supabase_auth_admin` execute | true | true |
+| `anon` / `authenticated` execute | false | false / false |
+| `supabase_auth_admin` select on `allowed_emails` | true | true (insert: false) |
+| `supabase_auth_admin` bypasses RLS | — | false, so `allowed_emails_auth_admin_select` policy is required, and present |
+| Hook with `stranger@example.com` | 403 error object | 403, "not approved for this logbook" |
+| Hook with an allowlisted address, uppercased and space-padded | `{}` | `{}` |
+| Hook with no email | 403 error object | 403 |
+
+The MCP cannot `set role supabase_auth_admin` (42501), so the hook's output
+was checked as the MCP's role and the auth admin's access via
+`has_*_privilege` and `pg_policies`. The real proof is the end-to-end run.
+
+Equivalent SQL, as Auth would call it (needs a role allowed to switch):
 
     begin;
     set local role supabase_auth_admin;

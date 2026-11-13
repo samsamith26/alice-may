@@ -144,7 +144,7 @@ export const floatPlanSchema = z.object({
  * the Supabase dashboard. The server enforces its own copy; this one is here
  * so a short password is caught before the request rather than after.
  */
-export const PASSWORD_MIN = 10
+export const PASSWORD_MIN = 8
 
 /** bcrypt, which Supabase hashes with, ignores everything past 72 bytes. */
 export const PASSWORD_MAX = 72
