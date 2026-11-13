@@ -15,19 +15,22 @@ export type { Point, Series, TripPointMeta } from './types'
  */
 
 /**
- * Points over time. x is a UTC timestamp (isoDateToUtcMs), so trips are
- * spaced by date and the axis carries month or year labels. The plot is a
- * client component for the per-point tooltip; deciding whether there is
- * anything to plot, and the legend, stay here on the server.
+ * Trips in order, one evenly spaced slot each (x = slot index), with Jan/Jul
+ * labels from `slotDates` where each half-year begins. The plot is a client
+ * component for the per-point tooltip; deciding whether there is anything to
+ * plot, and the legend, stay here on the server.
  */
 export function LineChart({
   series,
+  slotDates,
   height = 180,
   yLabel,
   title,
   emptyMessage = 'Not enough data yet',
 }: {
   series: Series[]
+  /** YYYY-MM-DD for each slot, in slot order. Omit for no x labels. */
+  slotDates?: string[]
   height?: number
   yLabel?: string
   /** Names the chart for screen readers when there is no yLabel. */
@@ -44,6 +47,7 @@ export function LineChart({
       {yLabel ? <Annotation>{yLabel}</Annotation> : null}
       <LineChartCanvas
         series={series}
+        slotDates={slotDates}
         height={height}
         ariaLabel={`${yLabel ?? title ?? 'Chart'}: ${series.map((s) => s.label).join(', ')}`}
       />

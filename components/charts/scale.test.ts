@@ -1,17 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   MONTH_LABEL_SPACE,
-  YEAR_LABEL_SPACE,
-  dodgeOffsets,
   extent,
-  isoDateToUtcMs,
+  halfYearTicks,
   linearScale,
   monthYearLabel,
   nearestPoint,
   niceTicks,
   placeTooltip,
-  timeDomain,
-  timeTicks,
 } from './scale'
 
 describe('linearScale', () => {
@@ -79,95 +75,89 @@ describe('extent', () => {
 
 /** The fuel chart's plot width: 320 less both paddings and the edge inset. */
 const PLOT = 266
-const d = isoDateToUtcMs
 
-describe('isoDateToUtcMs and monthYearLabel', () => {
-  it('reads a calendar date as UTC midnight', () => {
-    expect(d('2026-07-04')).toBe(Date.UTC(2026, 6, 4))
-  })
-
+describe('monthYearLabel', () => {
   it('labels by month and year without depending on locale', () => {
-    expect(monthYearLabel(d('2026-07-31'))).toBe('Jul 2026')
-    expect(monthYearLabel(d('2027-01-01'))).toBe('Jan 2027')
+    expect(monthYearLabel(2026, 6)).toBe('Jul 2026')
+    expect(monthYearLabel(2027, 0)).toBe('Jan 2027')
   })
 })
 
-describe('timeDomain', () => {
-  it('keeps a long span as it is', () => {
-    expect(timeDomain([d('2026-01-01'), d('2026-06-01')])).toEqual([
-      d('2026-01-01'),
-      d('2026-06-01'),
+describe('halfYearTicks', () => {
+  // Wide slots, so spacing never drops anything unless a test means it to.
+  const roomy = 100
+
+  it('labels Jan and Jul under the first trip on or after the 1st', () => {
+    const dates = ['2025-01-04', '2025-03-10', '2025-07-02', '2025-08-15', '2026-01-20']
+    expect(halfYearTicks(dates, roomy)).toEqual([
+      { index: 0, label: 'Jan 2025' },
+      { index: 2, label: 'Jul 2025' },
+      { index: 4, label: 'Jan 2026' },
     ])
   })
 
-  it('widens a short span to two weeks around its middle', () => {
-    const [min, max] = timeDomain([d('2026-07-04'), d('2026-07-04')])
-    expect(max - min).toBe(14 * 86_400_000)
-    expect((min + max) / 2).toBe(d('2026-07-04'))
-  })
-})
-
-describe('timeTicks', () => {
-  const labels = (from: string, to: string) =>
-    timeTicks(d(from), d(to), PLOT).map((t) => t.label)
-
-  it('labels every month over a short season', () => {
-    expect(labels('2026-07-01', '2026-10-31')).toEqual([
-      'Jul 2026',
-      'Aug 2026',
-      'Sep 2026',
-      'Oct 2026',
+  it('puts the label under a later month when that was the first trip', () => {
+    // First trip of the year in March: "Jan 2025" still marks where it began.
+    expect(halfYearTicks(['2024-11-02', '2025-03-10'], roomy)).toEqual([
+      { index: 1, label: 'Jan 2025' },
     ])
   })
 
-  it('skips months over a year, on calendar-aligned steps', () => {
-    // Monthly and two-monthly would collide at this width; quarterly lands on
-    // the calendar quarters, not on whichever month the data starts in.
-    expect(labels('2026-01-10', '2026-12-20')).toEqual(['Apr 2026', 'Jul 2026', 'Oct 2026'])
+  it('skips a half-year with no trips rather than moving its label', () => {
+    // Nothing between January and the following January: no "Jul 2025".
+    const dates = ['2025-01-10', '2025-05-01', '2026-02-01']
+    expect(halfYearTicks(dates, roomy)).toEqual([
+      { index: 0, label: 'Jan 2025' },
+      { index: 2, label: 'Jan 2026' },
+    ])
   })
 
-  it('shows only years once the span is long', () => {
-    expect(labels('2024-03-01', '2026-11-01')).toEqual(['2025', '2026'])
+  it('does not label a half-year that began before the data', () => {
+    // Starts mid-half-year on 15 December: no "Jul 2024" under it.
+    const dates = ['2024-12-15', '2024-12-28', '2025-01-05', '2025-07-04']
+    expect(halfYearTicks(dates, roomy)).toEqual([
+      { index: 2, label: 'Jan 2025' },
+      { index: 3, label: 'Jul 2025' },
+    ])
   })
 
-  it('steps whole years apart over decades', () => {
-    const ticks = labels('1996-01-01', '2026-01-01').map(Number)
+  it('labels the first trip when it falls in January or July itself', () => {
+    expect(halfYearTicks(['2025-07-20', '2025-08-01'], roomy)).toEqual([
+      { index: 0, label: 'Jul 2025' },
+    ])
+  })
+
+  it('keeps several trips on one day in their own slots', () => {
+    const dates = ['2025-06-30', '2025-07-01', '2025-07-01', '2025-07-02']
+    expect(halfYearTicks(dates, roomy)).toEqual([{ index: 1, label: 'Jul 2025' }])
+  })
+
+  it('drops the later of two labels that would overlap', () => {
+    // Jan and Jul one slot apart: at 30 units per slot they would collide.
+    const dates = ['2025-01-05', '2025-07-05', '2025-08-01', '2025-09-01', '2026-01-03']
+    expect(halfYearTicks(dates, 30)).toEqual([
+      { index: 0, label: 'Jan 2025' },
+      { index: 4, label: 'Jan 2026' },
+    ])
+  })
+
+  it('never leaves two kept labels closer than the label space', () => {
+    // Sixty-four trips over two years, as in the real log, at phone width.
+    const dates = Array.from({ length: 64 }, (_, i) => {
+      const day = new Date(Date.UTC(2024, 11, 15) + Math.round((i / 63) * 695) * 86_400_000)
+      return day.toISOString().slice(0, 10)
+    })
+    const ticks = halfYearTicks(dates, PLOT / 63)
     expect(ticks.length).toBeGreaterThan(1)
-    expect(ticks.every((year) => Number.isInteger(year))).toBe(true)
-  })
-
-  it('still labels a span with no month boundary in it', () => {
-    expect(labels('2026-07-05', '2026-07-20')).toEqual(['Jul 2026'])
-  })
-
-  it('never puts labels closer than they need, across many spans', () => {
-    const start = d('2025-02-01')
-    for (let days = 10; days < 4000; days += 37) {
-      const end = start + days * 86_400_000
-      const ticks = timeTicks(start, end, PLOT)
-      const unitsPerMs = PLOT / (end - start)
-      for (let i = 1; i < ticks.length; i += 1) {
-        const gap = (ticks[i].value - ticks[i - 1].value) * unitsPerMs
-        const needed = /^\d{4}$/.test(ticks[i].label) ? YEAR_LABEL_SPACE : MONTH_LABEL_SPACE
-        expect(gap).toBeGreaterThanOrEqual(needed)
-      }
+    for (let i = 1; i < ticks.length; i += 1) {
+      expect((ticks[i].index - ticks[i - 1].index) * (PLOT / 63)).toBeGreaterThanOrEqual(
+        MONTH_LABEL_SPACE,
+      )
     }
   })
 
-  it('returns nothing for an unusable range', () => {
-    expect(timeTicks(Number.NaN, 5, PLOT)).toEqual([])
-    expect(timeTicks(10, 5, PLOT)).toEqual([])
-  })
-})
-
-describe('dodgeOffsets', () => {
-  it('leaves points on their own day alone', () => {
-    expect(dodgeOffsets([1, 2, 3], 5)).toEqual([0, 0, 0])
-  })
-
-  it('fans out same-day points around their true position', () => {
-    expect(dodgeOffsets([1, 2, 2, 3], 6)).toEqual([0, -3, 3, 0])
-    expect(dodgeOffsets([4, 4, 4], 5)).toEqual([-5, 0, 5])
+  it('handles no trips', () => {
+    expect(halfYearTicks([], roomy)).toEqual([])
   })
 })
 

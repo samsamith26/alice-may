@@ -16,22 +16,18 @@ import {
 } from 'react'
 import { Grid, PAD, WIDTH } from './frame'
 import {
-  dodgeOffsets,
   extent,
+  halfYearTicks,
   linearScale,
   nearestPoint,
   niceTicks,
   placeTooltip,
-  timeDomain,
-  timeTicks,
 } from './scale'
 import type { Series, TripPointMeta } from './types'
 import { formatDistance, formatGallons, formatHours } from '@/lib/format/units'
 
 /** Keeps the first and last points off the axis lines. */
 const INSET = 6
-/** How far apart two same-day trips are fanned, in chart units. */
-const DODGE_GAP = 5
 /**
  * Hit radii in chart units — on a phone, one unit is about one CSS pixel, so a
  * tap lands on a point anywhere inside a ~44px circle around a 4px dot.
@@ -69,10 +65,13 @@ function rate(value: number | null): string {
 
 export function LineChartCanvas({
   series,
+  slotDates,
   height,
   ariaLabel,
 }: {
   series: Series[]
+  /** YYYY-MM-DD of each slot, in slot order; drives the Jan/Jul labels. */
+  slotDates?: string[]
   height: number
   ariaLabel: string
 }) {
@@ -85,29 +84,33 @@ export function LineChartCanvas({
 
   const layout = useMemo(() => {
     const all = series.flatMap((s) => s.points)
-    const [xMin, xMax] = timeDomain(all.map((p) => p.x))
     const [yMin, yMax] = extent(all.map((p) => p.y))
     const yTicks = niceTicks(Math.min(0, yMin), yMax, 4)
 
+    // x is a slot index: every trip gets the same width whatever the gap in
+    // days, so no two points can share a position.
+    const slots = slotDates?.length ?? Math.max(...all.map((p) => p.x)) + 1
     const left = PAD.left + INSET
     const right = WIDTH - PAD.right - INSET
-    const x = linearScale([xMin, xMax], [left, right])
+    // A lone slot sits in the middle rather than against the y axis.
+    const x =
+      slots <= 1
+        ? () => (left + right) / 2
+        : linearScale([0, slots - 1], [left, right])
     const y = linearScale([yTicks[0], yTicks[yTicks.length - 1]], [height - PAD.bottom, PAD.top])
+    const unitsPerSlot = (right - left) / Math.max(1, slots - 1)
 
     const lines = series.map((s, si) => {
-      const sorted = [...s.points].sort((a, b) => a.x - b.x)
-      const offsets = dodgeOffsets(
-        sorted.map((p) => p.x),
-        DODGE_GAP,
-      )
       const tone = s.tone ?? 'primary'
-      const points: Plotted[] = sorted.map((p, i) => ({
-        key: `${si}:${i}`,
-        tone,
-        px: x(p.x) + offsets[i],
-        py: y(p.y),
-        meta: p.meta,
-      }))
+      const points: Plotted[] = [...s.points]
+        .sort((a, b) => a.x - b.x)
+        .map((p, i) => ({
+          key: `${si}:${i}`,
+          tone,
+          px: x(p.x),
+          py: y(p.y),
+          meta: p.meta,
+        }))
       return { label: s.label, tone, points }
     })
 
@@ -118,11 +121,11 @@ export function LineChartCanvas({
       yTicks,
       y,
       x,
-      xTicks: timeTicks(xMin, xMax, right - left),
+      xTicks: slotDates ? halfYearTicks(slotDates, unitsPerSlot) : [],
       lines,
       flat,
     }
-  }, [series, height])
+  }, [series, slotDates, height])
 
   const active = layout.flat.find((p) => p.key === activeKey) ?? null
   const activeTrip = active?.meta?.tripId ?? null
@@ -301,10 +304,10 @@ export function LineChartCanvas({
         <Grid ticks={layout.yTicks} y={layout.y} height={height} />
 
         {layout.xTicks.map((tick) => {
-          const tx = layout.x(tick.value)
+          const tx = layout.x(tick.index)
           const half = tick.label.length * 2.3
           return (
-            <g key={tick.value}>
+            <g key={tick.index}>
               <line
                 x1={tx}
                 x2={tx}

@@ -1,7 +1,6 @@
 import { requireMembership } from '@/lib/auth/membership'
 import { createClient } from '@/lib/supabase/server'
 import { BarChart, LineChart, type TripPointMeta } from '@/components/charts/Charts'
-import { isoDateToUtcMs } from '@/components/charts/scale'
 import { SpendByType } from '@/components/fuel/SpendByType'
 import { Annotation, Card, StatTile } from '@/components/ui/primitives'
 import { gallonsPerHour, milesPerGallon, summariseFleet } from '@/lib/trips/derive'
@@ -33,7 +32,7 @@ export default async function FuelPage() {
 
   // Each trip's figures, worked out once and carried on both lines' points so
   // the chart's tooltip can show the whole trip without another query.
-  const plotted = rows.map((trip) => {
+  const measured = rows.flatMap((trip) => {
     const meta: TripPointMeta = {
       tripId: trip.id,
       date: trip.trip_date,
@@ -45,8 +44,14 @@ export default async function FuelPage() {
       galPerHour: gallonsPerHour(trip.fuel_used_gal, trip.hours_run),
       notes: excerpt(trip.notes, 90),
     }
-    return { x: isoDateToUtcMs(trip.trip_date), label: trip.trip_date, meta }
+    // A trip with nothing to plot on either line takes no slot.
+    return meta.miPerGal === null && meta.galPerHour === null ? [] : [meta]
   })
+
+  // One evenly spaced slot per trip, in date order, shared by both lines so a
+  // trip's two dots stay stacked.
+  const plotted = measured.map((meta, slot) => ({ x: slot, label: meta.date, meta }))
+  const slotDates = measured.map((meta) => meta.date)
 
   // Trips missing distance or fuel are skipped, never plotted as zero — a gap
   // in the record is not an efficiency of nought.
@@ -123,6 +128,7 @@ export default async function FuelPage() {
             the legend names each. */}
         <LineChart
           title="Fuel efficiency over time"
+          slotDates={slotDates}
           height={200}
           series={[
             { label: 'mi/gal', points: efficiency, tone: 'primary' },

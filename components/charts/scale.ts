@@ -50,127 +50,76 @@ export function extent(values: number[]): [number, number] {
   return [Math.min(...values), Math.max(...values)]
 }
 
-/* ------------------------------------------------------------ time axis -- */
-
-const DAY_MS = 86_400_000
-const SHORTEST_MONTH_MS = 28 * DAY_MS
+/* ------------------------------------------------------- half-year axis -- */
 
 const MONTHS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ] as const
 
-/**
- * A trip date (YYYY-MM-DD) as UTC midnight milliseconds. Dates are calendar
- * days, not instants, so everything on the time axis stays in UTC; a local
- * timezone would shift a date across midnight and onto the wrong day.
- */
-export function isoDateToUtcMs(iso: string): number {
-  const [year, month, day] = iso.split('-').map(Number)
-  return Date.UTC(year, month - 1, day)
-}
-
 /** "Jul 2026", independent of locale so server and client render alike. */
-export function monthYearLabel(ms: number): string {
-  const date = new Date(ms)
-  return `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`
+export function monthYearLabel(year: number, monthIndex: number): string {
+  return `${MONTHS[monthIndex]} ${year}`
 }
-
-/**
- * The x domain for a set of dates. A span under two weeks is widened to two
- * weeks around its middle, so one weekend's trips do not get stretched edge to
- * edge as though they were a season.
- */
-export function timeDomain(values: number[], minSpanMs = 14 * DAY_MS): [number, number] {
-  if (values.length === 0) return [0, minSpanMs]
-  const [min, max] = extent(values)
-  if (max - min >= minSpanMs) return [min, max]
-  const mid = (min + max) / 2
-  return [mid - minSpanMs / 2, mid + minSpanMs / 2]
-}
-
-export type TimeTick = { value: number; label: string }
-
-/** Steps tried in order, in months. Twelve and up are labelled by year alone. */
-const MONTH_STEPS = [1, 2, 3, 6, 12, 24, 60, 120] as const
 
 /**
  * Space each label needs, in chart units, at the 8-unit font the axis uses:
- * "Jul 2026" is about 36 wide, "2026" about 19, plus a gap either side.
- * Because the chart scales as a whole (viewBox), these hold at every screen
- * width — a phone gets fewer pixels but the labels shrink with them.
+ * "Jul 2026" is about 36 wide, plus a gap. The chart scales as a whole
+ * (viewBox), so this holds at every screen width.
  */
 export const MONTH_LABEL_SPACE = 46
-export const YEAR_LABEL_SPACE = 30
 
-/**
- * Month-start ticks across [min, max] that will not overlap at `plotWidth`
- * chart units. Months are skipped in even steps aligned to the calendar
- * (every 3 months lands on Jan/Apr/Jul/Oct), and once even 6-monthly labels
- * would collide, it switches to years.
- *
- * Never returns nothing: a span that contains no month boundary (trips all
- * within one month) gets a single label for that month at its middle.
- */
-export function timeTicks(min: number, max: number, plotWidth: number): TimeTick[] {
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) return []
+export type SlotTick = { index: number; label: string }
 
-  const span = Math.max(max - min, 1)
-  // Sized on the shortest month, not the average, so a step that clears on
-  // paper does not collide across February.
-  const unitsPerMonth = (plotWidth / span) * SHORTEST_MONTH_MS
-
-  const step =
-    MONTH_STEPS.find(
-      (months) =>
-        months * unitsPerMonth >= (months >= 12 ? YEAR_LABEL_SPACE : MONTH_LABEL_SPACE),
-    ) ?? MONTH_STEPS[MONTH_STEPS.length - 1]
-
-  const byYear = step >= 12
-  const start = new Date(min)
-  // Months since year 0, so alignment to the step is a plain modulus.
-  let index = start.getUTCFullYear() * 12 + start.getUTCMonth()
-  if (Date.UTC(Math.floor(index / 12), index % 12, 1) < min) index += 1
-  index = Math.ceil(index / step) * step
-
-  const ticks: TimeTick[] = []
-  for (; ticks.length < 200; index += step) {
-    const value = Date.UTC(Math.floor(index / 12), index % 12, 1)
-    if (value > max) break
-    ticks.push({
-      value,
-      label: byYear ? String(Math.floor(index / 12)) : monthYearLabel(value),
-    })
-  }
-
-  if (ticks.length === 0) {
-    const mid = min + (max - min) / 2
-    return [{ value: mid, label: monthYearLabel(mid) }]
-  }
-  return ticks
+/** Half-years since year 0: Jan–Jun of Y is 2Y, Jul–Dec is 2Y + 1. */
+function halfOf(iso: string): number {
+  const year = Number(iso.slice(0, 4))
+  const month = Number(iso.slice(5, 7))
+  return year * 2 + (month >= 7 ? 1 : 0)
 }
 
 /**
- * Sideways offsets that fan out points sharing an x value — two trips on one
- * day — so neither hides the other. Points with a unique x get 0. Offsets are
- * centred on the true position, in the order the points arrive.
+ * Where each January and July begins on an axis of evenly spaced trips.
+ *
+ * `dates` are the trips' YYYY-MM-DD dates in slot order (sorted by date).
+ * A half-year is labelled under the first trip on or after its 1st —
+ * "Jan 2025" may sit under a trip in March if that was the first one that
+ * year. A half-year with no trips gets no label; nothing is moved to a later
+ * month to fill the gap.
+ *
+ * The first trip is the exception: a half-year that began before the log did
+ * is labelled only if the first trip falls in that January or July itself.
+ * Otherwise data starting on 15 December would put "Jul 2024" under it.
+ *
+ * Labels closer than `minSpacing` chart units to the previous kept label
+ * (with `unitsPerSlot` units between neighbouring trips) are dropped, never
+ * squeezed: the later one goes.
  */
-export function dodgeOffsets(xs: number[], gap: number): number[] {
-  const groups = new Map<number, number[]>()
-  xs.forEach((x, i) => {
-    const group = groups.get(x)
-    if (group) group.push(i)
-    else groups.set(x, [i])
+export function halfYearTicks(
+  dates: string[],
+  unitsPerSlot: number,
+  minSpacing = MONTH_LABEL_SPACE,
+): SlotTick[] {
+  const ticks: SlotTick[] = []
+  let lastKept = -Infinity
+
+  dates.forEach((date, index) => {
+    const half = halfOf(date)
+    const startsHalf =
+      index === 0
+        ? date.slice(5, 7) === '01' || date.slice(5, 7) === '07'
+        : half > halfOf(dates[index - 1])
+    if (!startsHalf) return
+
+    if ((index - lastKept) * unitsPerSlot < minSpacing) return
+    lastKept = index
+    ticks.push({
+      index,
+      label: monthYearLabel(Math.floor(half / 2), half % 2 === 0 ? 0 : 6),
+    })
   })
 
-  const offsets = new Array<number>(xs.length).fill(0)
-  for (const members of groups.values()) {
-    if (members.length < 2) continue
-    members.forEach((pointIndex, rank) => {
-      offsets[pointIndex] = (rank - (members.length - 1) / 2) * gap
-    })
-  }
-  return offsets
+  return ticks
 }
 
 /**

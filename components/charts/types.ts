@@ -16,7 +16,10 @@ export type TripPointMeta = {
   notes: string | null
 }
 
-/** On a LineChart, x is a UTC millisecond timestamp (see isoDateToUtcMs). */
+/**
+ * On a LineChart, x is the trip's slot: its position in date order among the
+ * plotted trips (0, 1, 2, …). Every series uses the same slot for the same trip.
+ */
 export type Point = { x: number; y: number; label?: string; meta?: TripPointMeta }
 
 export type Series = { label: string; points: Point[]; tone?: 'primary' | 'secondary' }
