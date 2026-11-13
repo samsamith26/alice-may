@@ -55,10 +55,13 @@ export function HBarChart({
   bars,
   formatValue,
   emptyMessage = 'Nothing to chart yet',
+  tooltip = true,
 }: {
   bars: Array<{ label: string; value: number }>
   formatValue: (value: number) => string
   emptyMessage?: string
+  /** False when the figures printed on the bars already say it all. */
+  tooltip?: boolean
 }) {
   const tooltipId = useId()
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -134,18 +137,26 @@ export function HBarChart({
           ref={svgRef}
           viewBox={`0 0 ${WIDTH} ${height}`}
           className={INTERACTIVE_SVG}
-          style={{ cursor: current ? 'pointer' : 'default' }}
-          role="group"
-          aria-roledescription="chart"
-          aria-label={`Spend by type: ${bars
+          // With the tooltip off the chart is a picture: no stop in the tab order,
+          // no handlers, so nothing can become active, highlight, or look clickable.
+          {...(tooltip
+            ? {
+                style: { cursor: current ? 'pointer' : 'default' },
+                role: 'group',
+                'aria-roledescription': 'chart',
+                'aria-label': `Spend by type: ${bars
             .map((bar) => `${bar.label} ${formatValue(bar.value)}`)
-            .join(', ')}. Use the arrow keys to step through the rows.`}
-          aria-describedby={current ? tooltipId : undefined}
-          tabIndex={0}
-          onPointerMove={onPointerMove}
-          onClick={onClick}
-          onKeyDown={onKeyDown}
-          onFocus={onFocus}
+            .join(', ')}. Use the arrow keys to step through the rows.`,
+                'aria-describedby': current ? tooltipId : undefined,
+                tabIndex: 0,
+                onPointerMove,
+                onClick,
+                onKeyDown,
+                onFocus,
+              }
+            : { role: 'img', 'aria-label': `Spend by type: ${bars
+            .map((bar) => `${bar.label} ${formatValue(bar.value)}`)
+            .join(', ')}` })}
         >
           {active !== null ? (
             <rect

@@ -157,6 +157,8 @@ export default async function FuelPage() {
         <BarChart
           bars={annualSpend}
           formatValue={formatDollars}
+          // The yearly totals are printed above the bars already.
+          tooltip={false}
           emptyMessage="No spending recorded yet"
         />
       </Card>

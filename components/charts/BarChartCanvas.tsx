@@ -43,10 +43,13 @@ export function BarChartCanvas({
   bars,
   height,
   ariaLabel,
+  tooltip = true,
 }: {
   bars: PlottedBar[]
   height: number
   ariaLabel: string
+  /** False for charts whose figures are already printed on the bars. */
+  tooltip?: boolean
 }) {
   const router = useRouter()
   const tooltipId = useId()
@@ -135,16 +138,22 @@ export function BarChartCanvas({
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${height}`}
         className={INTERACTIVE_SVG}
-        style={{ cursor: current ? 'pointer' : 'default' }}
-        role="group"
-        aria-roledescription="chart"
-        aria-label={`${ariaLabel}. Use the arrow keys to step through the bars.`}
-        aria-describedby={current ? tooltipId : undefined}
-        tabIndex={0}
-        onPointerMove={onPointerMove}
-        onClick={onClick}
-        onKeyDown={onKeyDown}
-        onFocus={onFocus}
+        // With the tooltip off the chart is a picture: no stop in the tab order,
+        // no handlers, so nothing can become active, highlight, or look clickable.
+        {...(tooltip
+          ? {
+              style: { cursor: current ? 'pointer' : 'default' },
+              role: 'group',
+              'aria-roledescription': 'chart',
+              'aria-label': `${ariaLabel}. Use the arrow keys to step through the bars.`,
+              'aria-describedby': current ? tooltipId : undefined,
+              tabIndex: 0,
+              onPointerMove,
+              onClick,
+              onKeyDown,
+              onFocus,
+            }
+          : { role: 'img', 'aria-label': ariaLabel })}
       >
         {active !== null ? (
           <rect

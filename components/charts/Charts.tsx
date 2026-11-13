@@ -95,6 +95,7 @@ export function BarChart({
   formatValue,
   formatTooltip,
   emptyMessage = 'Nothing to chart yet',
+  tooltip = true,
 }: {
   bars: Bar[]
   height?: number
@@ -104,6 +105,11 @@ export function BarChart({
   /** The tooltip's figure; falls back to formatValue, then the bare number. */
   formatTooltip?: (value: number) => string
   emptyMessage?: string
+  /**
+   * Set false where the figures are already printed above the bars: the
+   * tooltip would only repeat them, and the bars should not look tappable.
+   */
+  tooltip?: boolean
 }) {
   if (bars.length === 0) return <EmptyState title={emptyMessage} />
 
@@ -124,6 +130,7 @@ export function BarChart({
       <BarChartCanvas
         bars={plotted}
         height={height}
+        tooltip={tooltip}
         ariaLabel={`${yLabel ?? 'Chart'}: ${plotted
           .map((bar) => `${bar.title} ${bar.valueText}`)
           .join(', ')}`}

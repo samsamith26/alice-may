@@ -117,7 +117,12 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Engine hours" value={formatHours(currentHours)} />
         <StatTile label="Trips" value={String(fleet.tripCount)} />
-        <StatTile label="Distance" value={formatDistance(fleet.totalMi)} unit="mi" />
+        <StatTile
+          label="Distance"
+          value={formatDistance(fleet.totalMi)}
+          unit="mi"
+          sub={`${formatDistance(fleet.totalNm)} nm`}
+        />
         <StatTile label="Fuel burned" value={formatGallons(fleet.totalFuelGal)} unit="gal" />
       </div>
 

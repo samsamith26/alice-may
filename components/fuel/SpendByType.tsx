@@ -62,6 +62,8 @@ export function SpendByType({
       <HBarChart
         bars={rows}
         formatValue={formatDollars}
+        // Every row already prints its figure; a tooltip would only repeat it.
+        tooltip={false}
         emptyMessage={
           selected === ALL
             ? 'Log a cost against a service or a tank of fuel to see this'
