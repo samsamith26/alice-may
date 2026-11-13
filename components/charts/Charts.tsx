@@ -111,7 +111,9 @@ export function BarChart({
           const centre = PAD.left + slot * (index + 0.5)
           const top = y(bar.value)
           return (
-            <g key={bar.label}>
+            // Keyed by position, not label: labels repeat (two trips on one
+            // day both read "06-12"), and a bar's place is its identity here.
+            <g key={index}>
               <rect
                 x={centre - barWidth / 2}
                 y={top}
