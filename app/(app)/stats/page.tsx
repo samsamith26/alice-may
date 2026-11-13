@@ -48,7 +48,12 @@ export default async function StatsPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Trips" value={String(fleet.tripCount)} />
         <StatTile label="Hours logged" value={formatHours(fleet.totalHours)} />
-        <StatTile label="Distance" value={formatDistance(fleet.totalMi)} unit="mi" />
+        <StatTile
+          label="Distance"
+          value={formatDistance(fleet.totalMi)}
+          unit="mi"
+          sub={`${formatDistance(fleet.totalNm)} nm`}
+        />
         <StatTile label="Fuel burned" value={formatGallons(fleet.totalFuelGal)} unit="gal" />
       </div>
 
@@ -62,6 +67,7 @@ export default async function StatsPage() {
           label="Average"
           value={fleet.avgMiPerGal === null ? '—' : fleet.avgMiPerGal.toFixed(2)}
           unit="mi/gal"
+          sub={fleet.avgNmPerGal === null ? undefined : `${fleet.avgNmPerGal.toFixed(2)} nm/gal`}
         />
         <StatTile label="Fuel spend" value={formatMoney(fleet.totalCostUsd)} />
         <StatTile
@@ -78,6 +84,7 @@ export default async function StatsPage() {
             label: year,
             value: tripsByYear.get(year) ?? 0,
           }))}
+          formatTooltip={(count) => `${count} ${count === 1 ? 'trip' : 'trips'}`}
           emptyMessage="No trips logged yet"
         />
       </Card>
@@ -87,8 +94,10 @@ export default async function StatsPage() {
         <BarChart
           bars={years.map((year) => ({
             label: year,
-            value: Math.round(hoursByYear.get(year) ?? 0),
+            // Unrounded, so the tooltip can give the tenth of an hour.
+            value: hoursByYear.get(year) ?? 0,
           }))}
+          formatTooltip={(hours) => `${hours.toFixed(1)} h`}
           emptyMessage="No hours logged yet"
         />
       </Card>

@@ -1,11 +1,9 @@
 'use client'
 
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  useEffect,
+  useCallback,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,6 +12,14 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react'
+import {
+  ChartTooltip,
+  INTERACTIVE_SVG,
+  TooltipHeading,
+  toViewBox,
+  useDismissOnOutsideTap,
+  type TooltipAnchor,
+} from './ChartTooltip'
 import { Grid, PAD, WIDTH } from './frame'
 import {
   extent,
@@ -21,7 +27,6 @@ import {
   linearScale,
   nearestPoint,
   niceTicks,
-  placeTooltip,
 } from './scale'
 import type { Series, TripPointMeta } from './types'
 import { formatDistance, formatGallons, formatHours } from '@/lib/format/units'
@@ -59,6 +64,22 @@ function tripDate(iso: string): string {
   })
 }
 
+/**
+ * The trip is lit on both lines; the tooltip clears both dots if it can, and
+ * the one in hand if it cannot.
+ */
+function tripAnchor(active: Plotted, all: Plotted[]): TooltipAnchor {
+  const ys = all
+    .filter((p) => p.meta && p.meta.tripId === active.meta?.tripId)
+    .map((p) => p.py)
+  return {
+    x: active.px,
+    y: Math.min(active.py, ...ys),
+    yEnd: Math.max(active.py, ...ys),
+    fallbackY: active.py,
+  }
+}
+
 function rate(value: number | null): string {
   return value === null ? '—' : value.toFixed(2)
 }
@@ -79,7 +100,6 @@ export function LineChartCanvas({
   const tooltipId = useId()
   const wrapRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const tipRef = useRef<HTMLDivElement>(null)
   const [activeKey, setActiveKey] = useState<string | null>(null)
 
   const layout = useMemo(() => {
@@ -130,79 +150,14 @@ export function LineChartCanvas({
   const active = layout.flat.find((p) => p.key === activeKey) ?? null
   const activeTrip = active?.meta?.tripId ?? null
 
-  // ---------------------------------------------------------- positioning --
-
-  // Placed imperatively, after layout, because where the tooltip can go
-  // depends on its rendered size and the chart's on-screen size.
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current
-    const svg = svgRef.current
-    const tip = tipRef.current
-    if (!wrap || !svg || !tip || !active) return
-
-    function place() {
-      if (!wrap || !svg || !tip || !active) return
-      const own = wrap.getBoundingClientRect()
-      const box = svg.getBoundingClientRect()
-      const toWrapY = (py: number) => box.top - own.top + (py / height) * box.height
-      // The same trip's point on the other line is lit too; keep clear of both.
-      const siblings = layout.flat
-        .filter((p) => p.meta && p.meta.tripId === active.meta?.tripId)
-        .map((p) => p.py)
-      const anchor = {
-        x: box.left - own.left + (active.px / WIDTH) * box.width,
-        y: toWrapY(Math.min(active.py, ...siblings)),
-        yEnd: toWrapY(Math.max(active.py, ...siblings)),
-      }
-      // The whole card is fair game, not just the plot: on a phone the plot
-      // alone is barely taller than the tooltip, but the heading above and
-      // the legend below leave room for it beside the point it describes.
-      const card = (wrap.closest('section') ?? wrap).getBoundingClientRect()
-      const MARGIN = 6
-      const size = { width: tip.offsetWidth, height: tip.offsetHeight }
-      const bounds = {
-        left: card.left - own.left + MARGIN,
-        top: card.top - own.top + MARGIN,
-        right: card.right - own.left - MARGIN,
-        bottom: card.bottom - own.top - MARGIN,
-      }
-      let spot = placeTooltip(anchor, size, bounds)
-      // Nowhere clears both lines: settle for clearing the point in hand.
-      if (spot.placement === 'over') {
-        spot = placeTooltip({ x: anchor.x, y: toWrapY(active.py) }, size, bounds)
-      }
-      tip.style.left = `${spot.left}px`
-      tip.style.top = `${spot.top}px`
-      tip.style.visibility = 'visible'
-    }
-
-    place()
-    window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
-  }, [active, height, layout])
-
+  const clearActive = useCallback(() => setActiveKey(null), [])
   // Tapping anywhere outside the chart and its tooltip dismisses it.
-  useEffect(() => {
-    if (activeKey === null) return
-    function onDown(event: globalThis.PointerEvent) {
-      if (!wrapRef.current?.contains(event.target as Node)) setActiveKey(null)
-    }
-    document.addEventListener('pointerdown', onDown)
-    return () => document.removeEventListener('pointerdown', onDown)
-  }, [activeKey])
+  useDismissOnOutsideTap(wrapRef, activeKey !== null, clearActive)
 
   // ------------------------------------------------------------- pointer --
 
-  function toChart(event: { clientX: number; clientY: number }) {
-    const svg = svgRef.current
-    const matrix = svg?.getScreenCTM()
-    if (!svg || !matrix) return null
-    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
-    return { x: point.x, y: point.y }
-  }
-
   function hit(event: { clientX: number; clientY: number }, radius: number): Plotted | null {
-    const target = toChart(event)
+    const target = toViewBox(svgRef.current, event)
     if (!target) return null
     const index = nearestPoint(
       layout.flat.map((p) => ({ x: p.px, y: p.py })),
@@ -289,7 +244,7 @@ export function LineChartCanvas({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${height}`}
-        className="w-full touch-manipulation rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-magenta-500"
+        className={INTERACTIVE_SVG}
         style={{ cursor: active ? 'pointer' : 'default' }}
         role="group"
         aria-roledescription="chart"
@@ -372,27 +327,16 @@ export function LineChartCanvas({
         ))}
       </svg>
 
-      {meta ? (
-        <div
-          ref={tipRef}
+      {active && meta ? (
+        <ChartTooltip
           id={tooltipId}
-          role="tooltip"
-          aria-live="polite"
-          // Hidden until placed, so it never flashes at the corner.
-          style={{ left: 0, top: 0, visibility: 'hidden' }}
-          className="absolute z-10 w-52 max-w-full rounded-lg border border-chart-300/80 bg-white/95 px-3 pb-2.5 pt-1 text-xs text-hull-950 shadow-lg backdrop-blur-sm dark:border-hull-700/70 dark:bg-hull-900/95 dark:text-chart-100"
+          wrapRef={wrapRef}
+          svgRef={svgRef}
+          viewHeight={height}
+          placementKey={active.key}
+          anchor={tripAnchor(active, layout.flat)}
         >
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-semibold">{tripDate(meta.date)}</p>
-            {/* In the header row to keep the tooltip short; min-h keeps the
-                tap target generous. */}
-            <Link
-              href={`/trips/${meta.tripId}`}
-              className="-mr-1 inline-flex min-h-9 shrink-0 items-center px-1 font-semibold text-magenta-600 hover:underline dark:text-magenta-400"
-            >
-              View trip →
-            </Link>
-          </div>
+          <TooltipHeading title={tripDate(meta.date)} href={`/trips/${meta.tripId}`} />
 
           <p className="readout">
             <span className="text-sm font-semibold">{formatDistance(meta.distanceMi)}</span>
@@ -431,7 +375,7 @@ export function LineChartCanvas({
           </dl>
 
           {meta.notes ? <p className="mt-1.5 line-clamp-2 opacity-75">{meta.notes}</p> : null}
-        </div>
+        </ChartTooltip>
       ) : null}
     </div>
   )

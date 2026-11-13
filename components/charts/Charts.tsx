@@ -1,10 +1,10 @@
-import { linearScale, niceTicks } from './scale'
-import { Grid, PAD, WIDTH } from './frame'
+import { BarChartCanvas, type PlottedBar } from './BarChartCanvas'
 import { LineChartCanvas } from './LineChartCanvas'
 import type { Series } from './types'
 import { Annotation, EmptyState } from '@/components/ui/primitives'
 
 export type { Point, Series, TripPointMeta } from './types'
+export { HBarChart } from './HBarChart'
 
 /*
  * Hand-rolled SVG rather than a charting library: a smaller bundle over harbour
@@ -69,173 +69,65 @@ export function LineChart({
   )
 }
 
+export type Bar = {
+  label: string
+  value: number
+  /** Tooltip heading; defaults to the label. */
+  title?: string
+  /** Tooltip figure, already formatted; overrides formatTooltip. */
+  display?: string
+  /** Where the tooltip's "View trip" link goes. */
+  href?: string
+}
+
+/**
+ * Vertical bars with a hover/tap tooltip giving each bar's exact figure.
+ *
+ * The data prep happens here, on the server: formatters are functions, which
+ * cannot be handed to a client component, so every string the plot needs is
+ * made now. The plot itself is a client component, server-rendered like any
+ * other, so without JavaScript the chart still draws — just without tooltips.
+ */
 export function BarChart({
   bars,
   height = 180,
   yLabel,
   formatValue,
+  formatTooltip,
   emptyMessage = 'Nothing to chart yet',
 }: {
-  bars: Array<{ label: string; value: number }>
+  bars: Bar[]
   height?: number
   yLabel?: string
   /** Supply to print each bar's figure above it, for charts read as amounts. */
   formatValue?: (value: number) => string
+  /** The tooltip's figure; falls back to formatValue, then the bare number. */
+  formatTooltip?: (value: number) => string
   emptyMessage?: string
 }) {
   if (bars.length === 0) return <EmptyState title={emptyMessage} />
 
-  const ticks = niceTicks(0, Math.max(...bars.map((b) => b.value)), 4)
-  const y = linearScale(
-    [ticks[0], ticks[ticks.length - 1]],
-    [height - PAD.bottom, PAD.top],
-  )
-
-  const usable = WIDTH - PAD.left - PAD.right
-  const slot = usable / bars.length
-  const barWidth = Math.max(4, Math.min(34, slot * 0.62))
+  const plotted: PlottedBar[] = bars.map((bar) => ({
+    label: bar.label,
+    value: bar.value,
+    above: formatValue ? formatValue(bar.value) : undefined,
+    title: bar.title ?? bar.label,
+    valueText:
+      bar.display ??
+      (formatTooltip ?? formatValue ?? ((value: number) => String(value)))(bar.value),
+    href: bar.href,
+  }))
 
   return (
     <figure className="flex flex-col gap-2">
       {yLabel ? <Annotation>{yLabel}</Annotation> : null}
-      <svg
-        viewBox={`0 0 ${WIDTH} ${height}`}
-        className="w-full"
-        role="img"
-        aria-label={`${yLabel ?? 'Chart'}: ${bars
-          .map((b) => `${b.label} ${formatValue ? formatValue(b.value) : b.value}`)
+      <BarChartCanvas
+        bars={plotted}
+        height={height}
+        ariaLabel={`${yLabel ?? 'Chart'}: ${plotted
+          .map((bar) => `${bar.title} ${bar.valueText}`)
           .join(', ')}`}
-      >
-        <Grid ticks={ticks} y={y} height={height} />
-        {bars.map((bar, index) => {
-          const centre = PAD.left + slot * (index + 0.5)
-          const top = y(bar.value)
-          return (
-            // Keyed by position, not label: labels repeat (two trips on one
-            // day both read "06-12"), and a bar's place is its identity here.
-            <g key={index}>
-              <rect
-                x={centre - barWidth / 2}
-                y={top}
-                width={barWidth}
-                height={Math.max(0, height - PAD.bottom - top)}
-                rx="1.5"
-                className="fill-shoal-500/85"
-              />
-              {formatValue ? (
-                // Above the bar, in ink rather than the bar's own colour: the
-                // figure is a label, and the teal is already saying "amount".
-                <text
-                  x={centre}
-                  y={Math.max(7, top - 4)}
-                  textAnchor="middle"
-                  className="fill-hull-900 text-[8px] font-semibold dark:fill-chart-100"
-                  style={{ fontVariantNumeric: 'tabular-nums' }}
-                >
-                  {formatValue(bar.value)}
-                </text>
-              ) : null}
-              <text
-                x={centre}
-                y={height - PAD.bottom + 12}
-                textAnchor="middle"
-                className="fill-hull-800/65 text-[8px] dark:fill-chart-200/60"
-              >
-                {bar.label}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
-    </figure>
-  )
-}
-
-/**
- * Ranked amounts, laid on their sides.
- *
- * Horizontal because the categories here are things like "Anodes / zincs" and
- * "Thruster battery", which will not fit under a vertical bar at any size worth
- * reading, and because a ranked list is read down the page. Not a pie: one slice
- * routinely holds three quarters of the total and the rest are slivers, which is
- * exactly the shape a pie renders worst.
- *
- * One colour throughout. Every bar measures the same thing, so a different hue
- * per row would be colour standing for nothing — the label already carries which
- * row is which. Figures are printed on every bar because there are few enough
- * rows for that to stay quiet, and because a boat at the helm has no hover.
- */
-export function HBarChart({
-  bars,
-  formatValue,
-  emptyMessage = 'Nothing to chart yet',
-}: {
-  bars: Array<{ label: string; value: number }>
-  formatValue: (value: number) => string
-  emptyMessage?: string
-}) {
-  if (bars.length === 0) return <EmptyState title={emptyMessage} />
-
-  const ROW = 13
-  const GAP = 9
-  /**
-   * Sized to the longest name the schedule can produce — "Engine oil & filter"
-   * and its kin, around 68 units at this size — plus a little air. It was 112,
-   * which left a band of nothing down the left of every row and took that width
-   * straight off the bars.
-   */
-  const GUTTER = 76
-  /** Enough for "$15,236" and the gap before it, and not a unit more. */
-  const VALUE_SPACE = 40
-  const top = 4
-
-  const height = bars.length * (ROW + GAP) - GAP + top * 2
-  const track = WIDTH - GUTTER - VALUE_SPACE
-  const largest = Math.max(...bars.map((bar) => bar.value), 0)
-
-  return (
-    <figure>
-      <svg
-        viewBox={`0 0 ${WIDTH} ${height}`}
-        className="w-full"
-        role="img"
-        aria-label={`Spend by type: ${bars
-          .map((bar) => `${bar.label} ${formatValue(bar.value)}`)
-          .join(', ')}`}
-      >
-        {bars.map((bar, index) => {
-          const rowTop = top + index * (ROW + GAP)
-          const width = largest > 0 ? Math.max(1, (bar.value / largest) * track) : 1
-          return (
-            <g key={bar.label}>
-              <text
-                x={GUTTER - 6}
-                y={rowTop + ROW - 3}
-                textAnchor="end"
-                className="fill-hull-800/75 text-[8px] dark:fill-chart-200/70"
-              >
-                {bar.label}
-              </text>
-              <rect
-                x={GUTTER}
-                y={rowTop}
-                width={width}
-                height={ROW}
-                rx="2"
-                className="fill-shoal-500/85"
-              />
-              <text
-                x={GUTTER + width + 5}
-                y={rowTop + ROW - 3}
-                className="fill-hull-900 text-[8px] font-semibold dark:fill-chart-100"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
-                {formatValue(bar.value)}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
+      />
     </figure>
   )
 }

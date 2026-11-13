@@ -42,3 +42,9 @@ export function shortDate(iso: string, todayIso: string): string {
   const label = `${SHORT_MONTHS[month - 1]} ${day}`
   return iso.slice(0, 4) === todayIso.slice(0, 4) ? label : `${label}, ${year}`
 }
+
+/** A YYYY-MM-DD date as "Aug 7, 2026", always with the year. */
+export function fullDate(iso: string): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  return `${SHORT_MONTHS[month - 1]} ${day}, ${year}`
+}

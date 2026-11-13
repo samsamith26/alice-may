@@ -6,6 +6,7 @@ import { Annotation, Card, StatTile } from '@/components/ui/primitives'
 import { gallonsPerHour, milesPerGallon, summariseFleet } from '@/lib/trips/derive'
 import { spendEntries, spendYears } from '@/lib/fuel/spend'
 import { excerpt } from '@/lib/format/text'
+import { fullDate } from '@/lib/format/dates'
 import { formatDollars, formatGallons, formatMoney } from '@/lib/format/units'
 
 export default async function FuelPage() {
@@ -67,8 +68,12 @@ export default async function FuelPage() {
     .filter((trip) => (trip.fuel_cost_usd ?? 0) > 0)
     .slice(-12)
     .map((trip) => ({
+      // The axis has room for month-day only; the tooltip gives the full date.
       label: trip.trip_date.slice(5),
       value: Number(trip.fuel_cost_usd),
+      title: fullDate(trip.trip_date),
+      display: formatMoney(Number(trip.fuel_cost_usd)),
+      href: `/trips/${trip.id}`,
     }))
 
   const spendByYear = new Map<string, number>()
@@ -103,6 +108,7 @@ export default async function FuelPage() {
           label="Average"
           value={fleet.avgMiPerGal === null ? '—' : fleet.avgMiPerGal.toFixed(2)}
           unit="mi/gal"
+          sub={fleet.avgNmPerGal === null ? undefined : `${fleet.avgNmPerGal.toFixed(2)} nm/gal`}
         />
         <StatTile
           label={`Spend ${thisYear}`}
