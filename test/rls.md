@@ -78,3 +78,51 @@ people aboard was left with none while the form reported only an error.
 Rows two and four are the ones that used to fail: both collided with
 `trip_passengers_pkey` and returned 409, which aborted the save after the delete
 had already emptied the table.
+
+## Allowlist enforced at signup (before-user-created hook)
+
+**Status: NOT YET RUN.** Written 2026-11-13 alongside the migration
+`before_user_created_hook`, which could not be applied in that session because
+the Supabase MCP was not authorised. Fill in the Actual column once the
+migration is applied and the hook is enabled under Authentication → Hooks.
+
+### At the database (via MCP, inside a rolled-back transaction)
+
+Call the function the way Auth does, as `supabase_auth_admin`:
+
+    begin;
+    set local role supabase_auth_admin;
+    select public.hook_before_user_created(
+      '{"user": {"email": "stranger@example.com"}}'::jsonb);   -- expect error object, http_code 403
+    select public.hook_before_user_created(
+      '{"user": {"email": "Samuel.Smith2204@Gmail.com"}}'::jsonb); -- expect {} (case-insensitive)
+    select public.hook_before_user_created('{"user": {}}'::jsonb);  -- expect error (no email)
+    rollback;
+
+    -- Nobody but Auth can call it
+    select has_function_privilege('anon', 'public.hook_before_user_created(jsonb)', 'execute');          -- false
+    select has_function_privilege('authenticated', 'public.hook_before_user_created(jsonb)', 'execute'); -- false
+    select has_function_privilege('supabase_auth_admin', 'public.hook_before_user_created(jsonb)', 'execute'); -- true
+
+### End to end (through /signup, hook enabled)
+
+| Scenario | Expected | Actual |
+| --- | --- | --- |
+| Non-approved address signs up | "isn't on the crew list" message; no `auth.users` row created | |
+| Approved address signs up | "Check your email"; unconfirmed `auth.users` row; membership row via `on_auth_user_created`; confirm link → button → signed in | |
+| Approved address removed on /access, then signs up again (never had an account) | refused, no `auth.users` row | |
+| Approved address removed on /access *after* creating an account | membership dropped at once; signup creates nothing (user already exists); sign-in works but lands on `/no-access` | |
+| Existing magic-link-era user uses "Set a password" | reset email → button → `/auth/update-password` → sign in with the new password; same `auth.users.id` as before | |
+
+The fourth row is the honest limit of the hook: it guards *creation*. A removed
+person's old account still exists and can still authenticate, but RLS is keyed
+on `boat_members`, which the delete trigger has already emptied, so they see
+nothing.
+
+### Existing accounts outside the allowlist (read-only audit)
+
+    select u.id, u.email, u.created_at, u.last_sign_in_at
+    from auth.users u
+    left join public.allowed_emails a on a.email = lower(u.email)
+    where a.email is null
+    order by u.created_at;

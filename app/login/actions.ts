@@ -1,46 +1,42 @@
 'use server'
 
-import { headers } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import type { AuthFormState } from '@/lib/auth/form-state'
+import { fieldErrors, signInSchema } from '@/lib/validation/schemas'
 
-export type LoginState =
-  | { status: 'idle' }
-  | { status: 'sent'; message: string }
-  | { status: 'error'; message: string }
+/**
+ * One message for every failure that concerns the account itself: unknown
+ * address, unapproved address, wrong password, no password set yet, email not
+ * yet confirmed. Telling those apart would let anyone check which addresses
+ * have accounts here.
+ */
+const GENERIC = 'Email or password is incorrect.'
 
-export async function requestMagicLink(
-  _prev: LoginState,
-  formData: FormData,
-): Promise<LoginState> {
+export async function signIn(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const email = String(formData.get('email') ?? '')
-    .trim()
-    .toLowerCase()
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { status: 'error', message: 'Enter a valid email address.' }
-  }
-
-  const origin = (await headers()).get('origin')
-  if (!origin) {
-    return { status: 'error', message: 'Could not determine the site address.' }
+  const parsed = signInSchema.safeParse({ email, password: formData.get('password') })
+  if (!parsed.success) {
+    return { status: 'error', fields: fieldErrors(parsed.error), email }
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    // The email template builds its link from this, so it points at the page
-    // with the confirm button rather than at anything that signs you in just by
-    // being fetched. Taken from the request so a link asked for on localhost
-    // comes back to localhost.
-    options: { emailRedirectTo: `${origin}/auth/confirm` },
-  })
+  const { error } = await supabase.auth.signInWithPassword(parsed.data)
 
   if (error) {
-    return { status: 'error', message: error.message }
+    // Rate limiting says nothing about the account, and hiding it would leave
+    // someone retrying a correct password against a lockout.
+    if (error.status === 429) {
+      return {
+        status: 'error',
+        message: 'Too many attempts. Wait a few minutes and try again.',
+        email: parsed.data.email,
+      }
+    }
+    return { status: 'error', message: GENERIC, email: parsed.data.email }
   }
 
-  return {
-    status: 'sent',
-    message: `Sign-in link sent to ${email}. It expires in an hour.`,
-  }
+  // Members land in the logbook; anyone else is routed to /no-access by the
+  // membership check on the way.
+  redirect('/')
 }

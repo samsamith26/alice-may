@@ -1,39 +1,21 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import type { EmailOtpType } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import {
+  asOtpType,
+  destinationAfterLink,
+  isRecoverySession,
+  linkFailurePath,
+  linkPurpose,
+} from '@/lib/auth/links'
 
 /**
- * The only types a sign-in email can legitimately carry. `type` arrives from a
- * query string, so it is checked against this rather than cast.
- */
-const EMAIL_OTP_TYPES = [
-  'magiclink',
-  'signup',
-  'invite',
-  'recovery',
-  'email_change',
-  'email',
-] as const satisfies readonly EmailOtpType[]
-
-function asOtpType(value: string): EmailOtpType | null {
-  return (EMAIL_OTP_TYPES as readonly string[]).includes(value)
-    ? (value as EmailOtpType)
-    : null
-}
-
-/** Only ever bounce a freshly signed-in user somewhere inside this app. */
-function safeNext(value: string): string {
-  return value.startsWith('/') && !value.startsWith('//') ? value : '/'
-}
-
-/**
- * Spend the sign-in token and start the session.
+ * Spend an emailed token: confirming a new account, or a password reset.
  *
- * Deliberately a POST from a button the person actually presses. Sign-in tokens
- * are single use, and mail providers and corporate scanners routinely fetch
- * every link in a message before it is ever opened — Outlook's Safe Links among
+ * Deliberately a POST from a button the person actually presses. Tokens are
+ * single use, and mail providers and corporate scanners routinely fetch every
+ * link in a message before it is ever opened — Outlook's Safe Links among
  * them. Whatever fetched the link first spent the token, and the person who
  * asked for it arrived second and was told it had expired.
  *
@@ -47,33 +29,33 @@ function safeNext(value: string): string {
  *   code — Supabase's default template sends people through its own verify
  *   endpoint first, which redirects here having already spent the token. A
  *   scanner still breaks that link before anyone sees it; deferring the
- *   exchange only stops us adding a second way to lose it. Kept so sign-in
- *   keeps working on the default template.
+ *   exchange only stops us adding a second way to lose it. Kept so signup and
+ *   reset keep working if a template is ever reset to the default.
  */
-export async function confirmSignIn(formData: FormData): Promise<void> {
-  const next = safeNext(String(formData.get('next') ?? '/'))
+export async function confirmLink(formData: FormData): Promise<void> {
+  const next = String(formData.get('next') ?? '/')
   const tokenHash = String(formData.get('token_hash') ?? '')
   const code = String(formData.get('code') ?? '')
+  const type = asOtpType(formData.get('type'))
+  const purpose = linkPurpose(type)
 
   const supabase = await createClient()
 
   if (tokenHash) {
-    const type = asOtpType(String(formData.get('type') ?? ''))
-    if (!type) redirect('/login?error=missing_token')
-
-    const { error } = await supabase.auth.verifyOtp({
-      type,
-      token_hash: tokenHash,
-    })
-    if (error) redirect('/login?error=link_expired')
-    redirect(next)
+    if (!type) redirect(linkFailurePath(purpose, 'missing'))
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash })
+    if (error) redirect(linkFailurePath(purpose, 'expired'))
+    redirect(destinationAfterLink(next, purpose === 'recovery'))
   }
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (error) redirect('/login?error=link_expired')
-    redirect(next)
+    if (error) redirect(linkFailurePath(purpose, 'expired'))
+    // A ?code= link carries no type, so ask the new session how it began.
+    const { data } = await supabase.auth.getClaims()
+    const recovery = purpose === 'recovery' || isRecoverySession(data?.claims.amr)
+    redirect(destinationAfterLink(next, recovery))
   }
 
-  redirect('/login?error=missing_token')
+  redirect(linkFailurePath(purpose, 'missing'))
 }

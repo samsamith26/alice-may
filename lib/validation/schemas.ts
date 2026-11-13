@@ -136,3 +136,71 @@ export const floatPlanSchema = z.object({
   destination_notes: optionalText,
   shore_contact_name: optionalText,
 })
+
+/* ------------------------------------------------------------------ auth -- */
+
+/**
+ * Must match Authentication → Providers → Email → Minimum password length in
+ * the Supabase dashboard. The server enforces its own copy; this one is here
+ * so a short password is caught before the request rather than after.
+ */
+export const PASSWORD_MIN = 10
+
+/** bcrypt, which Supabase hashes with, ignores everything past 72 bytes. */
+export const PASSWORD_MAX = 72
+
+const emailField = z
+  .string({ message: 'Enter your email address' })
+  .trim()
+  .toLowerCase()
+  .pipe(z.email('Enter a valid email address'))
+
+const newPassword = z
+  .string({ message: 'Choose a password' })
+  .min(PASSWORD_MIN, `Use at least ${PASSWORD_MIN} characters`)
+  .refine(
+    (value) => new TextEncoder().encode(value).length <= PASSWORD_MAX,
+    `Keep it under ${PASSWORD_MAX} characters`,
+  )
+
+/**
+ * Sign-in deliberately checks nothing about the password beyond its presence.
+ * Applying the length rule here would tell someone guessing that a short
+ * password cannot be right, and would lock out an account whose password
+ * predates a change to the minimum.
+ */
+export const signInSchema = z.object({
+  email: emailField,
+  password: z.string({ message: 'Enter your password' }).min(1, 'Enter your password'),
+})
+
+const passwordPair = z.object({
+  password: newPassword,
+  confirm_password: z.string({ message: 'Type the password again' }),
+})
+
+const pairMatches = (data: { password: string; confirm_password: string }) =>
+  data.password === data.confirm_password
+
+const mismatch = {
+  message: 'The two passwords don’t match',
+  path: ['confirm_password'],
+}
+
+export const signUpSchema = passwordPair
+  .extend({ email: emailField })
+  .refine(pairMatches, mismatch)
+
+export const forgotPasswordSchema = z.object({ email: emailField })
+
+export const updatePasswordSchema = passwordPair.refine(pairMatches, mismatch)
+
+/** The first message for each field, which is all a form shows at once. */
+export function fieldErrors(error: z.ZodError): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const issue of error.issues) {
+    const key = String(issue.path[0] ?? 'form')
+    out[key] ??= issue.message
+  }
+  return out
+}

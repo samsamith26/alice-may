@@ -53,19 +53,42 @@ Verified against current docs — training data is stale on several of these:
   `middleware()`. Node runtime only; the edge runtime is not supported in `proxy`.
 - **Use `supabase.auth.getClaims()` in the proxy**, not `getUser()`. Run nothing
   between `createServerClient` and that call — it causes random logouts.
-- **A sign-in link must never sign anyone in just by being fetched.** Mail clients
+- **Sign-in is email + password; magic-link sign-in is gone.** Emailed links
+  still exist for exactly two things: confirming a new account and setting or
+  resetting a password. Accounts made in the magic-link era have no password;
+  their owners use "Set a password" (`resetPasswordForEmail`), never signup.
+- **The allowlist is enforced by Supabase Auth, not the app.** A "Before User
+  Created" auth hook, `public.hook_before_user_created(jsonb)` (free plan), refuses
+  any new `auth.users` row whose lowercased email isn't in `allowed_emails`. It runs
+  as `supabase_auth_admin`, which does not bypass RLS — it needs its own grant *and*
+  its own select policy on `allowed_emails`. Execute is revoked from
+  anon/authenticated/public, or it becomes an allowlist oracle over `/rpc`. The
+  hook must be switched on in the dashboard (Authentication → Hooks); the
+  migration alone does nothing. The signup action matches the hook's message
+  text (`NOT_APPROVED_MARKER` in `lib/auth/links.ts`) — change both together.
+- **The hook only guards creation.** A person removed from `allowed_emails` keeps
+  their `auth.users` row and can still sign in; they just have no membership and
+  land on `/no-access`. That is intended — RLS keys off `boat_members`, not on
+  having an account.
+- **Sign-in failures all read "Email or password is incorrect."** Unknown,
+  unapproved, unconfirmed, and no-password-yet are deliberately indistinguishable.
+  The reset form likewise always says "If that address is approved, we've sent a
+  link". Signup is the one place that says an address isn't approved — the hook's
+  refusal already reveals it.
+- **An emailed link must never do anything just by being fetched.** Mail clients
   build previews and company scanners check links, both by loading them, and a
-  sign-in token works exactly once — so whatever loads it first spends it, and the
-  real recipient is told the link expired. Links land on `/auth/confirm`, which
-  reads the token, renders a button, and verifies nothing until that button is
-  pressed. Anything that verifies on page load brings the bug straight back.
+  token works exactly once — so whatever loads it first spends it, and the real
+  recipient is told the link expired. Links land on `/auth/confirm`, which reads
+  the token, renders a button, and verifies nothing until that button is pressed.
+  Anything that verifies on page load brings the bug straight back.
 - **Auth email templates are editable on the free plan**, under Authentication →
-  Emails. An earlier note here claimed they were not, which is what pushed the
-  whole flow onto PKCE to avoid needing one. The magic link template points at
-  `/auth/confirm` with `{{ .TokenHash }}`, keeping Supabase's own verify endpoint
-  out of the path entirely so there is nothing spendable before the button.
-  `/auth/confirm` also accepts the `?code=` Supabase's default template produces,
-  so sign-in still works if that template is ever reset.
+  Emails (true for this project; Supabase's 2026-06 change blocks it only for *new*
+  free projects on the default SMTP). "Confirm signup" and "Reset password" point at
+  `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=…`, keeping Supabase's own
+  verify endpoint out of the path so there is nothing spendable before the button.
+  The reset template adds `&next=/auth/update-password`. `/auth/confirm` also accepts
+  the `?code=` the default templates produce, and spots a reset from the session's
+  `amr` claim since such links carry no `type`.
 - **New `public` tables are not auto-exposed to the Data API.** Every table needs an
   explicit `grant ... to authenticated` or queries fail with a permission error despite
   correct RLS policies.

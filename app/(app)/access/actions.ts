@@ -44,7 +44,7 @@ export async function addAllowedEmail(
   revalidatePath('/access')
   return {
     status: 'saved',
-    message: `${parsed.data.email} can now sign in with a magic link.`,
+    message: `${parsed.data.email} can now create an account.`,
   }
 }
 

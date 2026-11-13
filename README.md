@@ -16,11 +16,17 @@ This is the part worth knowing, and it needs no SQL.
 1. Open **More → Crew &amp; access**.
 2. Enter their email, pick **Crew** (can log and edit trips) or **Viewer**
    (read-only).
-3. They go to the site, enter the same address, and follow the link they're sent.
+3. They go to the site, choose **Create an account**, enter the same address
+   and a password, and confirm it from the email they're sent.
 
-That's it. Membership is granted by a database trigger, in either order — they
-can be added before or after they first try to sign in. Removing an address
-revokes their access immediately.
+That's it. Membership is granted by a database trigger. Only listed addresses
+can ever become accounts: a Supabase "Before User Created" auth hook refuses
+any other signup in the database itself. Removing an address revokes their
+access immediately.
+
+Anyone who used the logbook back when it signed in with emailed links already
+has an account with no password. They use **Set a password** on the sign-in
+page instead of creating a new one.
 
 ## What's in it
 

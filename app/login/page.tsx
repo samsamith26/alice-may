@@ -1,71 +1,91 @@
 'use client'
 
-import { useActionState } from 'react'
+import Link from 'next/link'
+import { Suspense, useActionState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
-import { requestMagicLink, type LoginState } from './actions'
-import { Annotation, Button, Field, TextInput } from '@/components/ui/primitives'
+import { signIn } from './actions'
+import { IDLE, type AuthFormState } from '@/lib/auth/form-state'
+import { signInSchema } from '@/lib/validation/schemas'
+import { AuthLinks, AuthShell, FormMessage, linkClass } from '@/components/auth/AuthShell'
+import { PasswordInput } from '@/components/auth/PasswordInput'
+import { useClientCheck } from '@/components/auth/useClientCheck'
+import { Button, Field, TextInput } from '@/components/ui/primitives'
 
 const LINK_ERRORS: Record<string, string> = {
-  missing_code: 'That link was incomplete. Request a new one below.',
-  missing_token: 'That link was incomplete. Request a new one below.',
-  link_expired: 'That link has expired or was already used. Request a new one.',
+  missing_token:
+    'That link was incomplete. Open it straight from the email, or ask for another.',
+  link_expired:
+    'That link has expired or was already used. Sign in below, or ask for a new one.',
 }
 
 function LoginForm() {
-  const [state, formAction, pending] = useActionState<LoginState, FormData>(
-    requestMagicLink,
-    { status: 'idle' },
-  )
+  const [state, formAction, pending] = useActionState<AuthFormState, FormData>(signIn, IDLE)
+  const { errors, onSubmit } = useClientCheck(signInSchema)
   const linkError = LINK_ERRORS[useSearchParams().get('error') ?? '']
+  const fields = state.status === 'error' ? state.fields : undefined
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
-      <Field label="Email">
+    <form action={formAction} onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+      <Field label="Email" error={errors.email ?? fields?.email}>
         <TextInput
           name="email"
           type="email"
           autoComplete="email"
           inputMode="email"
+          autoCapitalize="none"
           required
           placeholder="you@example.com"
+          defaultValue={state.status === 'error' ? state.email : undefined}
         />
       </Field>
 
+      <Field label="Password" error={errors.password ?? fields?.password}>
+        <PasswordInput name="password" autoComplete="current-password" required />
+      </Field>
+
       <Button type="submit" disabled={pending}>
-        {pending ? 'Sending…' : 'Send sign-in link'}
+        {pending ? 'Signing in…' : 'Sign in'}
       </Button>
 
       {linkError && state.status === 'idle' ? (
-        <p className="text-sm text-alarm-500">{linkError}</p>
+        <FormMessage tone="error">{linkError}</FormMessage>
       ) : null}
-      {state.status === 'error' ? (
-        <p className="text-sm text-alarm-500">{state.message}</p>
+      {state.status === 'error' && state.message ? (
+        <FormMessage tone="error">{state.message}</FormMessage>
       ) : null}
-      {state.status === 'sent' ? (
-        <p className="text-sm text-shoal-300">{state.message}</p>
-      ) : null}
+
+      <Link href="/forgot-password" className={`${linkClass} self-start`}>
+        Forgot your password?
+      </Link>
     </form>
   )
 }
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-dvh flex-col justify-center bg-hull-950 px-6 py-16 text-chart-100">
-      <div className="mx-auto w-full max-w-sm">
-        <Annotation className="text-shoal-300">Monterey Harbor</Annotation>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight">Alice May</h1>
-        <p className="mt-3 text-sm text-chart-200/70">
-          The logbook. Sign in with a link sent to your email — there is no
-          password to remember.
-        </p>
+    <AuthShell intro="The logbook. Sign in with your email and password.">
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
 
-        <div className="mt-8">
-          <Suspense fallback={null}>
-            <LoginForm />
-          </Suspense>
-        </div>
-      </div>
-    </main>
+      <AuthLinks>
+        <p>
+          <span className="font-semibold text-chart-100">First time using a password?</span>{' '}
+          If you&rsquo;ve signed in here before with an emailed link, your account
+          already exists &mdash;{' '}
+          <Link href="/forgot-password" className={linkClass}>
+            set one here
+          </Link>
+          .
+        </p>
+        <p>
+          Never signed in before?{' '}
+          <Link href="/signup" className={linkClass}>
+            Create an account
+          </Link>{' '}
+          with the address Sam added for you.
+        </p>
+      </AuthLinks>
+    </AuthShell>
   )
 }

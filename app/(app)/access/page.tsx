@@ -21,8 +21,9 @@ export default async function AccessPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Crew &amp; access</h1>
         <p className="mt-1 text-sm text-hull-700/75 dark:text-chart-200/65">
-          Add someone&rsquo;s email here and they can sign in with a magic link.
-          Nothing else to set up.
+          Add someone&rsquo;s email here, then they choose &ldquo;Create an
+          account&rdquo; on the sign-in page with that address. Only addresses
+          on this list can ever have an account.
         </p>
       </div>
 

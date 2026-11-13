@@ -17,8 +17,9 @@ export default async function NoAccessPage() {
           You&rsquo;re not on the crew list
         </h1>
         <p className="mt-4 text-sm text-chart-200/80">
-          {user.email} isn&rsquo;t set up for this logbook yet. Ask Sam to add
-          it, then sign in again with the same address.
+          {user.email} isn&rsquo;t on the crew list for this logbook. Ask Sam
+          to add it, then sign in again with the same address and
+          password.
         </p>
 
         <form action="/auth/signout" method="post" className="mt-8">
