@@ -43,7 +43,7 @@ export default async function DashboardPage() {
     supabase
       .from('trips')
       .select(
-        'id, trip_date, hours_run, distance_nm, fuel_used_gal, fuel_cost_usd, conditions_snapshot',
+        'id, trip_date, hours_run, distance_nm, distance_mi, fuel_used_gal, fuel_cost_usd, conditions_snapshot',
       )
       .eq('boat_id', membership.boatId)
       .order('trip_date', { ascending: false }),
@@ -117,7 +117,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Engine hours" value={formatHours(currentHours)} />
         <StatTile label="Trips" value={String(fleet.tripCount)} />
-        <StatTile label="Distance" value={formatDistance(fleet.totalNm)} unit="nm" />
+        <StatTile label="Distance" value={formatDistance(fleet.totalMi)} unit="mi" />
         <StatTile label="Fuel burned" value={formatGallons(fleet.totalFuelGal)} unit="gal" />
       </div>
 
@@ -134,7 +134,7 @@ export default async function DashboardPage() {
                 })}
               </span>
               <span className="readout text-sm opacity-70">
-                {formatHours(latest.hours_run)} h · {formatDistance(latest.distance_nm)} nm
+                {formatHours(latest.hours_run)} h · {formatDistance(latest.distance_mi)} mi
               </span>
             </div>
             {latestSnapshot?.summary ? (

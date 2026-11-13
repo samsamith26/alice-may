@@ -17,7 +17,7 @@ import {
   formatHours,
   formatMoney,
 } from '@/lib/format/units'
-import { gallonsPerHour, nmPerGallon } from '@/lib/trips/derive'
+import { gallonsPerHour, milesPerGallon } from '@/lib/trips/derive'
 import { getBoat } from '@/lib/db/queries'
 import type { ConditionsSnapshot, ConditionsStatus } from '@/lib/conditions/types'
 
@@ -58,7 +58,7 @@ export default async function TripDetailPage({
   if (!trip) notFound()
 
   const isCrew = membership.role === 'crew'
-  const efficiency = nmPerGallon(trip.distance_nm, trip.fuel_used_gal)
+  const efficiency = milesPerGallon(trip.distance_nm, trip.fuel_used_gal)
   const burnRate = gallonsPerHour(trip.fuel_used_gal, trip.hours_run)
 
   // The gauge reads gallons used from full, so what is actually left needs the
@@ -109,12 +109,10 @@ export default async function TripDetailPage({
         <StatTile label="Hours run" value={formatHours(trip.hours_run)} />
         <StatTile
           label="Distance"
-          value={formatDistance(trip.distance_nm)}
-          unit="nm"
+          value={formatDistance(trip.distance_mi)}
+          unit="mi"
           sub={
-            trip.distance_mi === null
-              ? undefined
-              : `${formatDistance(trip.distance_mi)} statute miles`
+            trip.distance_nm === null ? undefined : `${formatDistance(trip.distance_nm)} nm`
           }
         />
         <StatTile label="Fuel used" value={formatGallons(trip.fuel_used_gal)} unit="gal" />
@@ -166,7 +164,7 @@ export default async function TripDetailPage({
             <dd>
               <Readout
                 value={efficiency === null ? '—' : efficiency.toFixed(2)}
-                unit={efficiency === null ? undefined : 'nm/gal'}
+                unit={efficiency === null ? undefined : 'mi/gal'}
               />
             </dd>
             <dt className="opacity-70">Burn rate</dt>

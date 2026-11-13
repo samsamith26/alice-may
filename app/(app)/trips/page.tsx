@@ -21,7 +21,7 @@ export default async function TripsPage() {
   const { data: trips } = await supabase
     .from('trips')
     .select(
-      'id, trip_date, hours_run, distance_nm, fuel_used_gal, conditions_snapshot',
+      'id, trip_date, hours_run, distance_mi, fuel_used_gal, conditions_snapshot',
     )
     .eq('boat_id', membership.boatId)
     .order('trip_date', { ascending: false })
@@ -84,7 +84,7 @@ export default async function TripsPage() {
                         Distance
                       </dt>
                       <dd>
-                        <Readout value={formatDistance(trip.distance_nm)} unit="nm" />
+                        <Readout value={formatDistance(trip.distance_mi)} unit="mi" />
                       </dd>
                     </div>
                     <div>

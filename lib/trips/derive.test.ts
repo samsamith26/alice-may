@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { gallonsPerHour, nmPerGallon, summariseFleet } from './derive'
+import { NM_TO_STATUTE_MILES } from '@/lib/format/units'
+import { gallonsPerHour, milesPerGallon, nmPerGallon, summariseFleet } from './derive'
 
 describe('trip derivations', () => {
   it('computes nautical miles per gallon', () => {
@@ -64,5 +65,27 @@ describe('trip derivations', () => {
         { hours_run: 2, distance_nm: null, fuel_used_gal: null, fuel_cost_usd: null },
       ]).avgNmPerGal,
     ).toBeNull()
+  })
+
+  it('computes statute miles per gallon from nautical miles', () => {
+    expect(milesPerGallon(26, 13)).toBeCloseTo(2 * NM_TO_STATUTE_MILES, 10)
+    expect(milesPerGallon(0, 13)).toBe(0)
+  })
+
+  it('returns null for statute mpg wherever nm/gal would be null', () => {
+    expect(milesPerGallon(26, 0)).toBeNull()
+    expect(milesPerGallon(null, 13)).toBeNull()
+    expect(milesPerGallon(26, -3)).toBeNull()
+  })
+
+  it('reports fleet distance and efficiency in statute miles too', () => {
+    const result = summariseFleet([
+      { hours_run: 4, distance_nm: 26, fuel_used_gal: 13, fuel_cost_usd: 70 },
+      { hours_run: 2, distance_nm: 10, fuel_used_gal: null, fuel_cost_usd: null },
+    ])
+    expect(result.totalMi).toBeCloseTo(36 * NM_TO_STATUTE_MILES, 10)
+    // The distance-only trip is excluded from efficiency, as for nm/gal.
+    expect(result.avgMiPerGal).toBeCloseTo(2 * NM_TO_STATUTE_MILES, 10)
+    expect(summariseFleet([]).avgMiPerGal).toBeNull()
   })
 })

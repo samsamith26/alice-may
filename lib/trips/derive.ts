@@ -1,5 +1,7 @@
+import { nmToStatuteMiles } from '@/lib/format/units'
+
 /**
- * Fuel and efficiency maths. Pure — no database access, no imports.
+ * Fuel and efficiency maths. Pure — no database access, no I/O.
  *
  * Every rate returns null rather than a number when its inputs cannot support
  * one, so a divide-by-zero never reaches a chart as Infinity or a dashboard as
@@ -16,10 +18,14 @@ export type TripMetrics = {
 export type FleetSummary = {
   totalHours: number
   totalNm: number
+  /** totalNm in statute miles — what the app shows. */
+  totalMi: number
   totalFuelGal: number
   totalCostUsd: number
   tripCount: number
   avgNmPerGal: number | null
+  /** Statute miles per gallon, over the same trips as avgNmPerGal. */
+  avgMiPerGal: number | null
 }
 
 function positive(value: number | null | undefined): value is number {
@@ -37,6 +43,19 @@ export function nmPerGallon(
 ): number | null {
   if (!nonNegative(distanceNm) || !positive(fuelUsedGal)) return null
   return distanceNm / fuelUsedGal
+}
+
+/**
+ * Statute miles per gallon, from the stored nautical miles. Takes nm because
+ * distance_nm is the canonical column; the conversion is the shared one, so
+ * this can never drift from the generated distance_mi.
+ */
+export function milesPerGallon(
+  distanceNm: number | null | undefined,
+  fuelUsedGal: number | null | undefined,
+): number | null {
+  const perGallon = nmPerGallon(distanceNm, fuelUsedGal)
+  return perGallon === null ? null : nmToStatuteMiles(perGallon)
 }
 
 export function gallonsPerHour(
@@ -76,7 +95,9 @@ export function summariseFleet(trips: TripMetrics[]): FleetSummary {
 
   return {
     ...totals,
+    totalMi: nmToStatuteMiles(totals.totalNm),
     tripCount: trips.length,
     avgNmPerGal: nmPerGallon(measured.nm, measured.gal),
+    avgMiPerGal: milesPerGallon(measured.nm, measured.gal),
   }
 }

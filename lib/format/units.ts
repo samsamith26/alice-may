@@ -66,8 +66,8 @@ export function formatHours(hours: number | null | undefined): string {
   return format(hours, 1)
 }
 
-export function formatDistance(nm: number | null | undefined): string {
-  return format(nm, 1)
+export function formatDistance(distance: number | null | undefined): string {
+  return format(distance, 1)
 }
 
 export function formatGallons(gal: number | null | undefined): string {

@@ -48,7 +48,7 @@ export default async function StatsPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Trips" value={String(fleet.tripCount)} />
         <StatTile label="Hours logged" value={formatHours(fleet.totalHours)} />
-        <StatTile label="Distance" value={formatDistance(fleet.totalNm)} unit="nm" />
+        <StatTile label="Distance" value={formatDistance(fleet.totalMi)} unit="mi" />
         <StatTile label="Fuel burned" value={formatGallons(fleet.totalFuelGal)} unit="gal" />
       </div>
 
@@ -60,8 +60,8 @@ export default async function StatsPage() {
         />
         <StatTile
           label="Average"
-          value={fleet.avgNmPerGal === null ? '—' : fleet.avgNmPerGal.toFixed(2)}
-          unit="nm/gal"
+          value={fleet.avgMiPerGal === null ? '—' : fleet.avgMiPerGal.toFixed(2)}
+          unit="mi/gal"
         />
         <StatTile label="Fuel spend" value={formatMoney(fleet.totalCostUsd)} />
         <StatTile
